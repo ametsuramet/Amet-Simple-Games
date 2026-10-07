@@ -292,6 +292,78 @@
       return false;
     }
 
+    function nearAny(x, y, r) {
+      for (const f of foods) {
+        const dx = f.x - x;
+        const dy = f.y - y;
+        if (dx * dx + dy * dy <= r * r) return true;
+      }
+      for (const p of powers) {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        if (dx * dx + dy * dy <= r * r) return true;
+      }
+      return false;
+    }
+
+    function findSpot() {
+      for (let i = 0; i < 40; i++) {
+        const x = 400 + Math.random() * (W - 800);
+        const y = 400 + Math.random() * (W - 800);
+        if (!nearAny(x, y, 420)) return { x, y };
+      }
+      return { x: W / 2, y: W / 2 };
+    }
+
+    function botThink(w, dt) {
+      if (!w.alive) return;
+      w.decideT -= dt;
+      const margin = 260;
+      if (w.x < margin || w.y < margin || w.x > W - margin || w.y > W - margin) {
+        w.targetAngle = Math.atan2(W / 2 - w.y, W / 2 - w.x);
+        w.decideT = 0.4;
+        return;
+      }
+      if (w.decideT > 0) return;
+      w.decideT = 0.3 + Math.random() * 0.2;
+      const ps = w.personality;
+      if (ps === "penakut") {
+        const threat = Math.hypot(w.x - player.x, w.y - player.y);
+        if (player.alive && threat < 300 && player.segs > w.segs * 0.9) {
+          w.targetAngle = Math.atan2(w.y - player.y, w.x - player.x);
+          w.boost = w.segs > 40;
+          return;
+        }
+        w.boost = false;
+      }
+      if (ps === "agresif" && player.alive) {
+        const d = Math.hypot(w.x - player.x, w.y - player.y);
+        if (d < 420 && player.segs < w.segs) {
+          w.targetAngle = Math.atan2(player.y - w.y, player.x - w.x);
+          w.boost = d > 160 && w.segs > 40;
+          return;
+        }
+      }
+      w.boost = false;
+      let best = null;
+      let bestD = 520 * 520;
+      for (const f of foods) {
+        const dx = f.x - w.x;
+        const dy = f.y - w.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD) {
+          bestD = d2;
+          best = f;
+        }
+      }
+      if (best) {
+        w.targetAngle = Math.atan2(best.y - w.y, best.x - w.x);
+        if (ps === "rakus" && bestD < 220 * 220) w.boost = w.segs > 60;
+      } else {
+        w.targetAngle = Math.random() * Math.PI * 2;
+      }
+    }
+
     function updateHUD() {
       document.getElementById("hudScore").textContent = Math.floor(player.score);
       document.getElementById("hudLen").textContent = Math.ceil(player.segs);
@@ -388,7 +460,7 @@
           .map(([o]) => o)
           .filter((o) => o !== w && Math.hypot(o.x - w.x, o.y - w.y) <= HEAD_R * 2);
         if (rivals.length === 0) {
-          dead.set(w, { cause: "body", killer: null, credit: false });
+          dead.set(w, { cause: "headon", killer: null, credit: false });
           continue;
         }
         const biggest = rivals.reduce((a, b) => (b.segs > a.segs ? b : a));
@@ -418,6 +490,57 @@
         ctx.font = (f.val >= 1 ? "18px" : "13px") + " serif";
         ctx.fillText(f.emoji, f.x, f.y);
       }
+    }
+
+    function updateBoard() {
+      const all = [player].concat(bots).filter((w) => w && w.alive);
+      all.sort((a, b) => b.segs - a.segs);
+      const list = document.getElementById("boardList");
+      list.innerHTML = "";
+      for (let i = 0; i < Math.min(5, all.length); i++) {
+        const w = all[i];
+        const li = document.createElement("li");
+        li.className =
+          "flex items-center justify-between gap-1 rounded px-1 py-0.5" +
+          (w.isPlayer ? " bg-sky-500/25" : "");
+        const name = document.createElement("span");
+        name.className = "truncate";
+        name.textContent = (i + 1) + ". " + w.emoji + (w.isPlayer ? " Kamu" : "");
+        const val = document.createElement("span");
+        val.className = "tabular-nums";
+        val.textContent = Math.ceil(w.segs);
+        li.appendChild(name);
+        li.appendChild(val);
+        list.appendChild(li);
+      }
+    }
+
+    function drawMinimap() {
+      const size = 140;
+      const x0 = 12;
+      const y0 = vh - size - 12;
+      ctx.fillStyle = "rgba(2, 6, 23, 0.7)";
+      ctx.fillRect(x0, y0, size, size);
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.6)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x0, y0, size, size);
+      const sx = size / W;
+      for (const f of foods) {
+        ctx.fillStyle = "#facc15";
+        ctx.fillRect(x0 + f.x * sx - 1, y0 + f.y * sx - 1, 2, 2);
+      }
+      const all = [player].concat(bots).filter((w) => w && w.alive);
+      for (const w of all) {
+        ctx.fillStyle = w.isPlayer ? "#f8fafc" : emojiColor(w.emoji);
+        ctx.beginPath();
+        ctx.arc(x0 + w.x * sx, y0 + w.y * sx, w.isPlayer ? 5 : 3.5, 0, 7);
+        ctx.fill();
+      }
+      ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
+      ctx.font = "10px Nunito, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText("Peta", x0 + 5, y0 + 5);
     }
 
     function stepWorm(w, dt) {
@@ -554,13 +677,20 @@
       foods = [];
       powers = [];
       for (let i = 0; i < FOOD_COUNT; i++) spawnFood(null, null, 1);
+      const pool = BOT_EMOJIS.filter((e) => e !== selected);
+      for (let i = 0; i < BOT_COUNT; i++) {
+        const spot = findSpot();
+        const b = makeWorm(spot.x, spot.y, pool[i % pool.length], BOT_PERMS[i]);
+        seedTrail(b);
+        bots.push(b);
+      }
       playTime = 0;
       hudClock = 0;
       boardClock = 0;
       powerTimer = 8 + Math.random() * 7;
       boostKey = false;
-      keys = {};
       boostPtr = null;
+      keys = {};
       joy.active = false;
       joy.id = null;
       joy.angle = null;
@@ -574,6 +704,7 @@
       show("board", true);
       show("boostBtn", true);
       updateHUD();
+      updateBoard();
       if (document.activeElement) document.activeElement.blur();
     }
 
@@ -594,7 +725,19 @@
       readInput();
       stepWorm(player, dt);
       for (const b of bots) {
-        if (b.alive) stepWorm(b, dt);
+        if (b.alive) {
+          botThink(b, dt);
+          stepWorm(b, dt);
+          eatFood(b);
+        } else {
+          b.respawnT -= dt;
+          if (b.respawnT <= 0) {
+            const spot = findSpot();
+            const nb = makeWorm(spot.x, spot.y, b.emoji, b.personality);
+            seedTrail(nb);
+            Object.assign(b, nb);
+          }
+        }
       }
       eatFood(player);
       checkCollisions();
@@ -603,6 +746,11 @@
       if (hudClock >= 0.2) {
         hudClock = 0;
         updateHUD();
+      }
+      boardClock += dt;
+      if (boardClock >= 0.5) {
+        boardClock = 0;
+        updateBoard();
       }
       cam.zoom += (clamp(1 - player.segs / 1250, 0.6, 1) - cam.zoom) * Math.min(1, dt * 3);
       cam.x += (player.x - cam.x) * Math.min(1, dt * 8);
@@ -687,6 +835,7 @@
       drawFoods();
       drawWorms();
       ctx.restore();
+      drawMinimap();
     }
 
     let rafId = 0;
