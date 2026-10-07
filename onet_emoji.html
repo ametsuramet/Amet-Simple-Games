@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Onet Emoji Connect</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Varela+Round&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --board-bg: #1e293b;
+            --tile-bg: #f8fafc;
+            --tile-hover: #e2e8f0;
+            --tile-selected: #fde047;
+            --line-color: #38bdf8;
+            --text-main: #f8fafc;
+        }
+
+        body {
+            font-family: 'Varela Round', sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at top, #1e293b 0%, #0f172a 100%);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            touch-action: none; /* Mencegah pull-to-refresh dan scrolling default */
+        }
+
+        /* HEADER & UI */
+        #ui-bar {
+            padding: 10px 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            z-index: 10;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .controls-row {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        /* TIMER BAR */
+        #timer-container {
+            width: 100%;
+            height: 12px;
+            background: #334155;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #timer-bar {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #22c55e, #3b82f6);
+            transition: width 1s linear, background-color 0.3s;
+        }
+        
+        #timer-bar.warning {
+            background: linear-gradient(90deg, #ef4444, #f97316);
+            animation: pulse-danger 1s infinite;
+        }
+
+        @keyframes pulse-danger {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        /* BUTTONS */
+        .btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn:active { transform: scale(0.95); background: rgba(255,255,255,0.2); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* GAME AREA */
+        #game-area {
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        #board {
+            position: relative;
+            background: var(--board-bg);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            /* Dimensi akan diset via JS berdasarkan layar */
+        }
+
+        /* TILE */
+        .tile {
+            position: absolute;
+            background: var(--tile-bg);
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3), inset 0 -2px 0 rgba(0,0,0,0.1);
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.1s, box-shadow 0.1s, opacity 0.3s, background-color 0.2s;
+            box-sizing: border-box;
+            border: 2px solid #cbd5e1;
+            /* Font size akan disesuaikan via JS */
+        }
+
+        .tile:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 3px rgba(0,0,0,0.3), inset 0 -1px 0 rgba(0,0,0,0.1);
+        }
+
+        .tile.selected {
+            background: var(--tile-selected);
+            border-color: #ca8a04;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(253, 224, 71, 0.6);
+            z-index: 2;
+        }
+
+        .tile.hint {
+            animation: bounce-hint 1s infinite;
+            border-color: #22c55e;
+        }
+
+        @keyframes bounce-hint {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); box-shadow: 0 10px 15px rgba(34, 197, 94, 0.4); }
+        }
+
+        /* CANVAS UNTUK GARIS (The Onet Line) */
+        #line-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Jangan halangi klik ke ubin */
+            z-index: 5;
+        }
+
+        /* MODAL MESSAGE */
+        #msg-modal {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        #msg-modal.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-box {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 20px;
+            text-align: center;
+            border: 2px solid #3b82f6;
+            transform: scale(0.8);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #msg-modal.show .modal-box {
+            transform: scale(1);
+        }
+
+        /* Partikel klik */
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            background: #38bdf8;
+            border-radius: 50%;
+            animation: fade-out 0.5s ease-out forwards;
+            z-index: 20;
+        }
+        @keyframes fade-out {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(3); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-bar">
+        <div class="stats-row">
+            <h1 class="text-xl font-bold text-sky-400">Onet Emoji</h1>
+            <div class="text-lg font-bold">Skor: <span id="score" class="text-yellow-400">0</span></div>
+        </div>
+        <div id="timer-container">
+            <div id="timer-bar"></div>
+        </div>
+        <div class="controls-row">
+            <button id="btn-shuffle" class="btn">🔀 Acak <span id="shuffle-count" class="bg-blue-600 px-2 rounded-full text-xs">3</span></button>
+            <button id="btn-hint" class="btn">💡 Hint <span id="hint-count" class="bg-green-600 px-2 rounded-full text-xs">3</span></button>
+            <button id="btn-pause" class="btn">⏸️ Jeda</button>
+        </div>
+    </div>
+
+    <div id="game-area">
+        <div id="board">
+            <div id="tiles-container"></div>
+            <canvas id="line-canvas"></canvas>
+        </div>
+    </div>
+
+    <div id="msg-modal">
+        <div class="modal-box">
+            <h2 id="msg-title" class="text-4xl font-bold mb-2 text-yellow-400">Waktu Habis!</h2>
+            <p id="msg-desc" class="text-gray-300 mb-6">Skor akhir Anda: 0</p>
+            <button id="btn-restart" class="bg-blue-500 hover:bg-blue-400 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transition-transform transform hover:scale-105 active:scale-95">
+                Main Lagi
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Kumpulan Emoji
+        const EMOJI_POOL = ['😀','😂','😎','😍','😡','🥶','😱','🤢',
+                            '🐶','🐱','🐭','🐰','🦊','🐻','🐼','🐸',
+                            '🍎','🍌','🍉','🍇','🍓','🍔','🍕','🍩',
+                            '⚽','🏀','🏈','🚗','✈️','🚀','🛸','💎'];
+
+        // Konfigurasi Papan (Onet klasik butuh border luar untuk jalur garis)
+        // Kita gunakan ukuran logis yang akan di-scale ke ukuran layar
+        let ROWS = 10;
+        let COLS = 7;
+        let TOTAL_PAIRS = (ROWS * COLS) / 2; // Harus genap!
+        // Jika ROWS * COLS ganjil, kita akan kurangi 1 kolom atau baris di logika inisialisasi.
+
+        let board = []; // 2D array [y][x] merepresentasikan grid. 0 = kosong, object = ada tile.
+        let tilesDOM = []; // Menyimpan referensi DOM
+        let tileSize = 0; // Akan dikalkulasi
+        let padding = 0; // Jarak antar tile
+
+        let selectedTile = null;
+        let score = 0;
+        let pairsRemaining = 0;
+        
+        // Power-ups
+        let shufflesLeft = 3;
+        let hintsLeft = 3;
+
+        // Timer
+        const GAME_DURATION = 180; // 3 menit dalam detik
+        let timeLeft = GAME_DURATION;
+        let timerInterval = null;
+        let isPaused = false;
+        let isGameOver = true;
+
+        // DOM Elements
+        const boardEl = document.getElementById('board');
+        const tilesContainer = document.getElementById('tiles-container');
+        const canvas = document.getElementById('line-canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const timerBar = document.getElementById('timer-bar');
+        const msgModal = document.getElementById('msg-modal');
+        const msgTitle = document.getElementById('msg-title');
+        const msgDesc = document.getElementById('msg-desc');
+
+        // Audio Sintesis (Tanpa file eksternal)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            if (type === 'select') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'match') {
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            } else if (type === 'error') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            }
+        }
+
+        function calculateLayout() {
+            const gameArea = document.getElementById('game-area');
+            const maxWidth = gameArea.clientWidth - 20; // Margin
+            const maxHeight = gameArea.clientHeight - 20;
+
+            // Pastikan genap untuk pasangan
+            if ((ROWS * COLS) % 2 !== 0) {
+                COLS = COLS % 2 === 0 ? COLS : COLS - 1; 
+            }
+            TOTAL_PAIRS = (ROWS * COLS) / 2;
+
+            // Dalam Onet, area '0' di sekeliling board (border luar) adalah JALUR SAH.
+            // Jadi grid fisik di layar adalah (COLS + 2) x (ROWS + 2).
+            const visualCols = COLS + 2; 
+            const visualRows = ROWS + 2;
+
+            // Kalkulasi ukuran Tile agar fit di layar
+            const sizeW = Math.floor(maxWidth / visualCols);
+            const sizeH = Math.floor(maxHeight / visualRows);
+            tileSize = Math.min(sizeW, sizeH);
+            
+            // Sedikit gap antar tile untuk visual
+            padding = Math.floor(tileSize * 0.05); 
+            
+            const boardWidth = visualCols * tileSize;
+            const boardHeight = visualRows * tileSize;
+
+            boardEl.style.width = `${boardWidth}px`;
+            boardEl.style.height = `${boardHeight}px`;
+
+            // Set ukuran kanvas sama dengan board
+            canvas.width = boardWidth;
+            canvas.height = boardHeight;
+        }
+
+        function initBoardData() {
+            // Buat array 2D: [y][x] dari 0 hingga ROWS+1 dan 0 hingga COLS+1
+            // Baris/kolom 0 dan max adalah margin kosong untuk jalur.
+            board = [];
+            tilesDOM = [];
+            for (let y = 0; y < ROWS + 2; y++) {
+                board[y] = [];
+                for (let x = 0; x < COLS + 2; x++) {
+                    board[y][x] = 0; // 0 = Kosong
+                }
+            }
+
+            // Siapkan pasangan Emoji
+            let emojisToPlace = [];
+            let poolCopy = [...EMOJI_POOL].sort(() => Math.random() - 0.5); // Acak pool
+            
+            for (let i = 0; i < TOTAL_PAIRS; i++) {
+                let emoji = poolCopy[i % poolCopy.length];
+                emojisToPlace.push(emoji, emoji);
+            }
+            emojisToPlace.sort(() => Math.random() - 0.5); // Acak urutan diletakkan
+
+            // Masukkan ke board bagian dalam (mulai dari x=1, y=1)
+            let emojiIndex = 0;
+            for (let y = 1; y <= ROWS; y++) {
+                for (let x = 1; x <= COLS; x++) {
+                    let tileData = {
+                        x: x, 
+                        y: y, 
+                        emoji: emojisToPlace[emojiIndex],
+                        id: `tile-${x}-${y}`
+                    };
+                    board[y][x] = tileData;
+                    emojiIndex++;
+                }
+            }
+            pairsRemaining = TOTAL_PAIRS;
+        }
+
+        function renderBoard() {
+            tilesContainer.innerHTML = '';
+            const fontSize = Math.floor(tileSize * 0.5);
+
+            for (let y = 1; y <= ROWS; y++) {
+                for (let x = 1; x <= COLS; x++) {
+                    const tileData = board[y][x];
+                    if (tileData === 0) continue; // Sudah dihapus
+
+                    const el = document.createElement('div');
+                    el.className = 'tile';
+                    el.id = tileData.id;
+                    el.textContent = tileData.emoji;
+                    
+                    // Posisi absolut berdasarkan x,y di grid visual
+                    el.style.width = `${tileSize - padding*2}px`;
+                    el.style.height = `${tileSize - padding*2}px`;
+                    el.style.left = `${x * tileSize + padding}px`;
+                    el.style.top = `${y * tileSize + padding}px`;
+                    el.style.fontSize = `${fontSize}px`;
+
+                    // Event handler
+                    el.addEventListener('pointerdown', (e) => handleTileClick(tileData, el, e));
+                    
+                    tilesContainer.appendChild(el);
+                    tileData.element = el;
+                }
+            }
+        }
+
+        // Cek apakah cell kosong (termasuk batas luar board)
+        function isEmpty(x, y) {
+            if (x < 0 || x > COLS + 1 || y < 0 || y > ROWS + 1) return false; // Out of bounds mutlak
+            return board[y][x] === 0;
+        }
+
+        // Cek garis lurus (0 belokan) antara dua titik kosong/target
+        function checkLine(p1, p2) {
+            if (p1.x === p2.x) { // Garis Vertikal
+                let min = Math.min(p1.y, p2.y);
+                let max = Math.max(p1.y, p2.y);
+                for (let y = min + 1; y < max; y++) {
+                    if (!isEmpty(p1.x, y)) return false;
+                }
+                return true;
+            }
+            if (p1.y === p2.y) { // Garis Horizontal
+                let min = Math.min(p1.x, p2.x);
+                let max = Math.max(p1.x, p2.x);
+                for (let x = min + 1; x < max; x++) {
+                    if (!isEmpty(x, p1.y)) return false;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // Cek 1 Belokan (Membentuk huruf L)
+        function checkOneTurn(p1, p2) {
+            // Sudut 1: x dari p1, y dari p2
+            let corner1 = {x: p1.x, y: p2.y};
+            if (isEmpty(corner1.x, corner1.y) && checkLine(p1, corner1) && checkLine(corner1, p2)) {
+                return [p1, corner1, p2];
+            }
+            // Sudut 2: x dari p2, y dari p1
+            let corner2 = {x: p2.x, y: p1.y};
+            if (isEmpty(corner2.x, corner2.y) && checkLine(p1, corner2) && checkLine(corner2, p2)) {
+                return [p1, corner2, p2];
+            }
+            return null;
+        }
+
+        // Cek 2 Belokan (Membentuk huruf Z atau U)
+        function checkTwoTurns(p1, p2) {
+            // Ekspansi horizontal dari p1
+            for (let dir of [-1, 1]) {
+                let x = p1.x + dir;
+                while (x >= 0 && x <= COLS + 1 && isEmpty(x, p1.y)) {
+                    let current = {x: x, y: p1.y};
+                    let pathOneTurn = checkOneTurn(current, p2);
+                    if (pathOneTurn) {
+                        return [p1, ...pathOneTurn];
+                    }
+                    x += dir;
+                }
+            }
+            // Ekspansi vertikal dari p1
+            for (let dir of [-1, 1]) {
+                let y = p1.y + dir;
+                while (y >= 0 && y <= ROWS + 1 && isEmpty(p1.x, y)) {
+                    let current = {x: p1.x, y: y};
+                    let pathOneTurn = checkOneTurn(current, p2);
+                    if (pathOneTurn) {
+                        return [p1, ...pathOneTurn];
+                    }
+                    y += dir;
+                }
+            }
+            return null;
+        }
+
+        // Cari jalur (0, 1, atau 2 belokan)
+        function findPath(t1, t2) {
+            let p1 = {x: t1.x, y: t1.y};
+            let p2 = {x: t2.x, y: t2.y};
+            
+            // 0 Turn (Straight line)
+            if (checkLine(p1, p2)) return [p1, p2];
+            
+            // 1 Turn (L-shape)
+            let path1 = checkOneTurn(p1, p2);
+            if (path1) return path1;
+            
+            // 2 Turns (U/Z-shape)
+            let path2 = checkTwoTurns(p1, p2);
+            if (path2) return path2;
+
+            return null;
+        }
+
+        function handleTileClick(tileData, el, event) {
+            if (isGameOver || isPaused) return;
+
+            // Efek partikel klik
+            createParticle(event.clientX, event.clientY);
+            
+            // Reset hint jika ada
+            clearHints();
+
+            if (selectedTile === null) {
+                // Pilih pertama
+                selectedTile = tileData;
+                el.classList.add('selected');
+                playSound('select');
+            } else if (selectedTile === tileData) {
+                // Batalkan pilihan
+                el.classList.remove('selected');
+                selectedTile = null;
+                playSound('select');
+            } else {
+                // Pilih kedua
+                if (selectedTile.emoji === tileData.emoji) {
+                    // Cek Jalur!
+                    let path = findPath(selectedTile, tileData);
+                    if (path) {
+                        // MATCH!
+                        el.classList.add('selected');
+                        playSound('match');
+                        drawLineAndRemove(path, selectedTile, tileData);
+                    } else {
+                        // Buntu jalur
+                        playSound('error');
+                        selectedTile.element.classList.remove('selected');
+                        selectedTile = tileData;
+                        el.classList.add('selected');
+                    }
+                } else {
+                    // Beda Emoji
+                    playSound('error');
+                    selectedTile.element.classList.remove('selected');
+                    selectedTile = tileData;
+                    el.classList.add('selected');
+                }
+            }
+        }
+
+        // Animasi Menggambar Garis
+        function drawLineAndRemove(path, t1, t2) {
+            // Kunci interaksi sementara
+            isPaused = true;
+            
+            // Setup canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            ctx.strokeStyle = '#38bdf8'; // Warna neon blue
+            ctx.lineWidth = Math.max(4, tileSize * 0.15);
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#38bdf8';
+
+            // Koordinat tengah tile
+            const getCenter = (p) => ({
+                x: p.x * tileSize + (tileSize / 2),
+                y: p.y * tileSize + (tileSize / 2)
+            });
+
+            const start = getCenter(path[0]);
+            ctx.moveTo(start.x, start.y);
+            for (let i = 1; i < path.length; i++) {
+                const pt = getCenter(path[i]);
+                ctx.lineTo(pt.x, pt.y);
+            }
+            ctx.stroke();
+
+            // Animasi penghapusan DOM
+            t1.element.style.transform = 'scale(0) rotate(90deg)';
+            t1.element.style.opacity = '0';
+            t2.element.style.transform = 'scale(0) rotate(90deg)';
+            t2.element.style.opacity = '0';
+
+            // Update state
+            score += 100;
+            pairsRemaining--;
+            addTime(2); // Bonus 2 detik per match
+            updateUI();
+
+            // Hapus jalur dan logic cell setelah jeda visual
+            setTimeout(() => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Hapus dari data board
+                board[t1.y][t1.x] = 0;
+                board[t2.y][t2.x] = 0;
+                
+                // Hapus dari DOM
+                if(t1.element && t1.element.parentNode) t1.element.parentNode.removeChild(t1.element);
+                if(t2.element && t2.element.parentNode) t2.element.parentNode.removeChild(t2.element);
+
+                selectedTile = null;
+                isPaused = false;
+
+                checkWinOrStuck();
+            }, 300); // Tampil garis selama 300ms
+        }
+
+        function getAvailableMoves() {
+            let moves = [];
+            // Cari semua tile yang aktif
+            let activeTiles = [];
+            for (let y = 1; y <= ROWS; y++) {
+                for (let x = 1; x <= COLS; x++) {
+                    if (board[y][x] !== 0) activeTiles.push(board[y][x]);
+                }
+            }
+
+            // O(N^2) cek, tapi N kecil (max 80)
+            for (let i = 0; i < activeTiles.length; i++) {
+                for (let j = i + 1; j < activeTiles.length; j++) {
+                    if (activeTiles[i].emoji === activeTiles[j].emoji) {
+                        if (findPath(activeTiles[i], activeTiles[j]) !== null) {
+                            moves.push([activeTiles[i], activeTiles[j]]);
+                        }
+                    }
+                }
+            }
+            return moves;
+        }
+
+        function checkWinOrStuck() {
+            if (pairsRemaining === 0) {
+                endGame("Kemenangan Sempurna!", `Skor Total: ${score + timeLeft * 10}`); // Bonus waktu
+                return;
+            }
+
+            const moves = getAvailableMoves();
+            if (moves.length === 0) {
+                if (shufflesLeft > 0) {
+                    // Auto shuffle jika tidak ada jalan
+                    doShuffle(); 
+                } else {
+                    endGame("Jalan Buntu!", `Tidak ada langkah & Acak habis. Skor: ${score}`);
+                }
+            }
+        }
+
+        function doHint() {
+            if (isGameOver || isPaused || hintsLeft <= 0) return;
+            
+            clearHints();
+            if (selectedTile) {
+                selectedTile.element.classList.remove('selected');
+                selectedTile = null;
+            }
+
+            const moves = getAvailableMoves();
+            if (moves.length > 0) {
+                hintsLeft--;
+                score = Math.max(0, score - 20);
+                updateUI();
+                
+                // Highlight pasangan pertama yang ketemu
+                const m = moves[0];
+                m[0].element.classList.add('hint');
+                m[1].element.classList.add('hint');
+            }
+        }
+
+        function clearHints() {
+            document.querySelectorAll('.hint').forEach(el => el.classList.remove('hint'));
+        }
+
+        function doShuffle() {
+            if (isGameOver || isPaused || shufflesLeft <= 0) return;
+            
+            clearHints();
+            if (selectedTile) {
+                selectedTile.element.classList.remove('selected');
+                selectedTile = null;
+            }
+
+            shufflesLeft--;
+            score = Math.max(0, score - 50);
+            updateUI();
+
+            // Ambil semua emoji yang masih ada
+            let activeEmojis = [];
+            for (let y = 1; y <= ROWS; y++) {
+                for (let x = 1; x <= COLS; x++) {
+                    if (board[y][x] !== 0) activeEmojis.push(board[y][x].emoji);
+                }
+            }
+            
+            // Acak emoji
+            activeEmojis.sort(() => Math.random() - 0.5);
+
+            // Masukkan kembali
+            let i = 0;
+            for (let y = 1; y <= ROWS; y++) {
+                for (let x = 1; x <= COLS; x++) {
+                    if (board[y][x] !== 0) {
+                        board[y][x].emoji = activeEmojis[i];
+                        board[y][x].element.textContent = activeEmojis[i];
+                        
+                        // Animasi putar
+                        const el = board[y][x].element;
+                        el.style.transition = 'transform 0.5s';
+                        el.style.transform = 'rotateY(360deg)';
+                        setTimeout(() => {
+                            el.style.transition = 'transform 0.1s, box-shadow 0.1s, opacity 0.3s, background-color 0.2s';
+                            el.style.transform = 'none';
+                        }, 500);
+                        
+                        i++;
+                    }
+                }
+            }
+
+            // Pastikan ada jalan setelah diacak, kalau tidak, rekursif (jarang terjadi)
+            setTimeout(checkWinOrStuck, 600);
+        }
+
+        function addTime(seconds) {
+            timeLeft = Math.min(GAME_DURATION, timeLeft + seconds);
+        }
+
+        function updateTimerVisual() {
+            const pct = (timeLeft / GAME_DURATION) * 100;
+            timerBar.style.width = `${pct}%`;
+            
+            if (timeLeft < GAME_DURATION * 0.2) {
+                timerBar.classList.add('warning');
+            } else {
+                timerBar.classList.remove('warning');
+            }
+        }
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (!isPaused && !isGameOver) {
+                    timeLeft--;
+                    updateTimerVisual();
+                    if (timeLeft <= 0) {
+                        endGame("Waktu Habis!", `Skor Akhir: ${score}`);
+                    }
+                }
+            }, 1000);
+        }
+
+        function updateUI() {
+            scoreEl.textContent = score;
+            document.getElementById('shuffle-count').textContent = shufflesLeft;
+            document.getElementById('hint-count').textContent = hintsLeft;
+            
+            document.getElementById('btn-shuffle').disabled = shufflesLeft <= 0;
+            document.getElementById('btn-hint').disabled = hintsLeft <= 0;
+        }
+
+        function startGame() {
+            isGameOver = false;
+            isPaused = false;
+            score = 0;
+            timeLeft = GAME_DURATION;
+            shufflesLeft = 3;
+            hintsLeft = 3;
+            selectedTile = null;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            msgModal.classList.remove('show');
+
+            calculateLayout();
+            initBoardData();
+            renderBoard();
+            updateUI();
+            updateTimerVisual();
+            startTimer();
+            
+            // Cek preventif jika map awal tidak bisa dimainkan
+            const moves = getAvailableMoves();
+            if(moves.length === 0) doShuffle();
+        }
+
+        function endGame(title, desc) {
+            isGameOver = true;
+            clearInterval(timerInterval);
+            msgTitle.textContent = title;
+            msgDesc.textContent = desc;
+            msgModal.classList.add('show');
+        }
+
+        function togglePause() {
+            if (isGameOver) return;
+            isPaused = !isPaused;
+            const btn = document.getElementById('btn-pause');
+            if (isPaused) {
+                btn.innerHTML = '▶️ Lanjut';
+                boardEl.style.opacity = '0.1'; // Sembunyikan board agar tidak di-cheat
+            } else {
+                btn.innerHTML = '⏸️ Jeda';
+                boardEl.style.opacity = '1';
+            }
+        }
+
+        // Efek Visual Klik
+        function createParticle(x, y) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.style.left = `${x - 10}px`;
+            p.style.top = `${y - 10}px`;
+            p.style.width = '20px';
+            p.style.height = '20px';
+            document.body.appendChild(p);
+            setTimeout(() => document.body.removeChild(p), 500);
+        }
+
+        // Event Listeners
+        document.getElementById('btn-shuffle').addEventListener('click', doShuffle);
+        document.getElementById('btn-hint').addEventListener('click', doHint);
+        document.getElementById('btn-pause').addEventListener('click', togglePause);
+        document.getElementById('btn-restart').addEventListener('click', startGame);
+
+        window.addEventListener('resize', () => {
+            // Responsive redraw saat layar diubah
+            if (!isGameOver) {
+                calculateLayout();
+                renderBoard();
+            }
+        });
+
+        // Jalankan game
+        window.onload = () => {
+            setTimeout(startGame, 100);
+        };
+
+    </script>
+</body>
+</html>

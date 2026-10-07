@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Emoji Solitaire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #047857; /* Classic casino green */
+            --bg-gradient: radial-gradient(circle at top, #059669 0%, #064e3b 100%);
+            --card-aspect-ratio: 1.4;
+            /* Calculate card width based on 7 columns + gaps, for mobile */
+            --card-w: calc((100vw - 40px) / 7);
+            --card-h: calc(var(--card-w) * var(--card-aspect-ratio));
+            --card-gap: 5px;
+            --overlap-y: calc(var(--card-h) * 0.25); /* How much cards overlap in tableau */
+            --overlap-y-facedown: calc(var(--card-h) * 0.1); 
+        }
+
+        @media (min-width: 600px) {
+            :root {
+                --card-w: 70px; /* Fixed size for larger screens */
+            }
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: var(--bg-color);
+            background-image: var(--bg-gradient);
+            color: white;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Prevent scrolling */
+            touch-action: none; /* Prevent pinch zoom & pull-to-refresh */
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #game-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            position: relative;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        #top-zone {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            height: var(--card-h);
+        }
+
+        .zone-group {
+            display: flex;
+            gap: var(--card-gap);
+        }
+
+        #tableau-zone {
+            display: flex;
+            justify-content: space-between;
+            flex: 1;
+            gap: var(--card-gap);
+        }
+
+        .pile-slot {
+            width: var(--card-w);
+            height: var(--card-h);
+            border: 2px dashed rgba(255,255,255,0.3);
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .pile-slot.foundation::after {
+            content: '🌟';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: calc(var(--card-w) * 0.4);
+            opacity: 0.2;
+        }
+
+        .pile-slot.stock::after {
+            content: '🔄';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: calc(var(--card-w) * 0.4);
+            opacity: 0.5;
+        }
+
+        .card {
+            width: var(--card-w);
+            height: var(--card-h);
+            border-radius: 8px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 4px;
+            box-sizing: border-box;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
+            transform-origin: center center;
+        }
+
+        /* Mobile specific padding adjustment */
+        @media (max-width: 400px) {
+            .card { padding: 2px; border-radius: 4px; }
+        }
+
+        .card.selected {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.6);
+            z-index: 100 !important;
+            filter: brightness(1.1);
+            border: 2px solid #fbbf24;
+        }
+
+        /* Dragging Styles */
+        .card.dragging {
+            z-index: 9999 !important;
+            pointer-events: none; /* Let pointer pass through to detect drop target */
+            box-shadow: 0 15px 30px rgba(0,0,0,0.7);
+            filter: brightness(1.1);
+        }
+
+        /* Card Face Designs */
+        .card-red { color: #ef4444; }
+        .card-black { color: #1f2937; }
+
+        .card-top-left {
+            font-size: calc(var(--card-w) * 0.35);
+            line-height: 1;
+            font-weight: 900;
+            text-align: left;
+        }
+        
+        .card-suit-small {
+            font-size: calc(var(--card-w) * 0.25);
+            margin-top: -2px;
+        }
+
+        .card-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: calc(var(--card-w) * 0.6);
+        }
+
+        /* Card Back Design */
+        .card.face-down {
+            background: linear-gradient(135deg, #1e3a8a, #4c1d95);
+            border: 2px solid #e2e8f0;
+            background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0, rgba(255,255,255,0.05) 2px, transparent 2px, transparent 8px);
+        }
+        
+        .card.face-down .card-content {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card.face-down::after {
+            display: none; /* Hapus duplikasi pseudo-element agar tidak bertumpuk */
+        }
+        
+        .card.face-down .card-content {
+            display: none;
+        }
+        
+        .card.face-down::after {
+            content: '🌟';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: calc(var(--card-w) * 0.4);
+        }
+
+        /* UI Elements */
+        #ui-bar {
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.2);
+            backdrop-filter: blur(5px);
+            z-index: 200;
+        }
+
+        .btn {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn:active { transform: scale(0.95); }
+        .btn:hover { background: rgba(255,255,255,0.3); }
+
+        /* Modal */
+        #modal {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        #modal.show { opacity: 1; pointer-events: auto; }
+        
+        .modal-content {
+            background: #f8fafc;
+            color: #0f172a;
+            padding: 2rem;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transform: scale(0.8);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 4px solid #fbbf24;
+        }
+        #modal.show .modal-content { transform: scale(1); }
+
+    </style>
+</head>
+<body>
+
+    <div id="ui-bar">
+        <div>
+            <span class="text-yellow-300 font-bold text-lg">Skor: <span id="score">0</span></span>
+        </div>
+        <div class="text-sm text-gray-200">
+            Waktu: <span id="timer">00:00</span>
+        </div>
+        <div class="flex gap-2">
+            <button id="btn-mode" class="btn text-blue-200 border-blue-400">🎴 Ambil 1</button>
+            <button id="btn-hint" class="btn text-green-200 border-green-400">💡 Hint</button>
+            <button id="btn-undo" class="btn" disabled>↩️ Undo</button>
+            <button id="btn-restart" class="btn">🔄 Ulang</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <!-- Top Area: Stock, Waste, Foundations -->
+        <div id="top-zone">
+            <div class="zone-group">
+                <div id="stock-pile" class="pile-slot stock" onclick="handleStockClick()"></div>
+                <div id="waste-pile" class="pile-slot" data-pile-type="waste" data-pile-index="0"></div>
+            </div>
+            
+            <div class="zone-group">
+                <div id="foundation-0" class="pile-slot foundation" data-pile-type="foundation" data-pile-index="0" onclick="handlePileClick('foundation', 0)"></div>
+                <div id="foundation-1" class="pile-slot foundation" data-pile-type="foundation" data-pile-index="1" onclick="handlePileClick('foundation', 1)"></div>
+                <div id="foundation-2" class="pile-slot foundation" data-pile-type="foundation" data-pile-index="2" onclick="handlePileClick('foundation', 2)"></div>
+                <div id="foundation-3" class="pile-slot foundation" data-pile-type="foundation" data-pile-index="3" onclick="handlePileClick('foundation', 3)"></div>
+            </div>
+        </div>
+
+        <!-- Tableau Area: 7 columns -->
+        <div id="tableau-zone">
+            <div id="tableau-0" class="pile-slot tab-pile" data-pile-type="tableau" data-pile-index="0" onclick="handlePileClick('tableau', 0)"></div>
+            <div id="tableau-1" class="pile-slot tab-pile" data-pile-type="tableau" data-pile-index="1" onclick="handlePileClick('tableau', 1)"></div>
+            <div id="tableau-2" class="pile-slot tab-pile" data-pile-type="tableau" data-pile-index="2" onclick="handlePileClick('tableau', 2)"></div>
+            <div id="tableau-3" class="pile-slot tab-pile" data-pile-type="tableau" data-pile-index="3" onclick="handlePileClick('tableau', 3)"></div>
+            <div id="tableau-4" class="pile-slot tab-pile" data-pile-type="tableau" data-pile-index="4" onclick="handlePileClick('tableau', 4)"></div>
+            <div id="tableau-5" class="pile-slot tab-pile" data-pile-type="tableau" data-pile-index="5" onclick="handlePileClick('tableau', 5)"></div>
+            <div id="tableau-6" class="pile-slot tab-pile" data-pile-type="tableau" data-pile-index="6" onclick="handlePileClick('tableau', 6)"></div>
+        </div>
+    </div>
+
+    <!-- Win Modal -->
+    <div id="modal">
+        <div class="modal-content">
+            <h2 class="text-4xl font-black mb-2 text-green-600">Luar Biasa! 🎉</h2>
+            <p class="text-lg text-gray-600 mb-6">Kamu berhasil menyelesaikan Emoji Solitaire.</p>
+            <p class="font-bold text-xl mb-6">Skor: <span id="final-score" class="text-blue-600">0</span></p>
+            <button onclick="initGame()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full text-xl shadow-lg transition-transform hover:scale-105 active:scale-95">
+                Main Lagi
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const SUITS = ['hearts', 'diamonds', 'clubs', 'spades'];
+        const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        
+        // Emoji Definitions
+        const SUIT_EMOJIS = {
+            'hearts': '❤️',     // Merah
+            'diamonds': '💎',   // Merah (Alternatif Berlian/Permata)
+            'clubs': '🍀',      // Hitam/Hijau (Clover)
+            'spades': '🌑'      // Hitam (Bulan Gelap/Spade)
+        };
+
+        const SUIT_COLORS = {
+            'hearts': 'red', 'diamonds': 'red',
+            'clubs': 'black', 'spades': 'black'
+        };
+
+        const FACE_EMOJIS = {
+            'J': '🧑‍🌾', // Jack (Petani/Pemuda)
+            'Q': '👸',   // Queen (Ratu)
+            'K': '🤴'    // King (Raja)
+        };
+
+        let deck = [];
+        let state = {
+            stock: [],
+            waste: [],
+            foundations: [[], [], [], []], // 4 piles
+            tableau: [[], [], [], [], [], [], []] // 7 piles
+        };
+        
+        let selection = null; // { pileType, pileIndex, cardIndex }
+        let dragState = null; // Drag and Drop state
+        
+        let score = 0;
+        let moves = 0;
+        let timeSeconds = 0;
+        let timerInterval = null;
+        let history = []; // Untuk fitur Undo
+        let drawMode = 1; // Mode kocok: 1 atau 3 kartu
+
+        // DOM Elements
+        const scoreEl = document.getElementById('score');
+        const timerEl = document.getElementById('timer');
+        const btnUndo = document.getElementById('btn-undo');
+        const btnHint = document.getElementById('btn-hint');
+
+        // Audio
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            if(type === 'card') {
+                // Suara gesekan kartu singkat
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+            } else if (type === 'error') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            } else if (type === 'score') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            }
+        }
+
+        function createDeck() {
+            let newDeck = [];
+            let idCounter = 0;
+            for (let suit of SUITS) {
+                for (let i = 0; i < RANKS.length; i++) {
+                    newDeck.push({
+                        id: `card-${idCounter++}`,
+                        suit: suit,
+                        rank: RANKS[i],
+                        value: i + 1, // A=1, K=13
+                        color: SUIT_COLORS[suit],
+                        isFaceUp: false
+                    });
+                }
+            }
+            return newDeck;
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function initGame() {
+            deck = shuffle(createDeck());
+            
+            // Reset State
+            state = { stock: [], waste: [], foundations: [[],[],[],[]], tableau: [[],[],[],[],[],[],[]] };
+            selection = null;
+            score = 0; moves = 0; timeSeconds = 0; history = [];
+            updateScore(0);
+            
+            document.getElementById('modal').classList.remove('show');
+            btnUndo.disabled = true;
+
+            // Deal cards to Tableau (Klondike style)
+            let cardIndex = 0;
+            for (let col = 0; col < 7; col++) {
+                for (let row = 0; row <= col; row++) {
+                    let card = deck[cardIndex++];
+                    if (row === col) card.isFaceUp = true; // Top card is face up
+                    state.tableau[col].push(card);
+                }
+            }
+
+            // Remaining to stock
+            while (cardIndex < deck.length) {
+                state.stock.push(deck[cardIndex++]);
+            }
+
+            // Reset UI
+            clearAllDOM();
+            renderAll();
+            
+            // Timer
+            if(timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeSeconds++;
+                let m = Math.floor(timeSeconds / 60).toString().padStart(2, '0');
+                let s = (timeSeconds % 60).toString().padStart(2, '0');
+                timerEl.textContent = `${m}:${s}`;
+            }, 1000);
+        }
+
+        function clearAllDOM() {
+            document.querySelectorAll('.pile-slot').forEach(el => el.innerHTML = '');
+        }
+
+        function createCardDOM(card, pileType, pileIndex, cardIndexInPile) {
+            const el = document.createElement('div');
+            el.className = `card ${card.isFaceUp ? '' : 'face-down'}`;
+            el.id = card.id;
+
+            if (card.isFaceUp) {
+                const isRed = card.color === 'red';
+                el.classList.add(isRed ? 'card-red' : 'card-black');
+
+                const suitIcon = SUIT_EMOJIS[card.suit];
+                let centerContent = suitIcon;
+                
+                if (FACE_EMOJIS[card.rank]) {
+                    centerContent = FACE_EMOJIS[card.rank];
+                } else if (card.rank === 'A') {
+                    centerContent = suitIcon;
+                }
+
+                el.innerHTML = `
+                    <div class="card-content" style="height:100%; position:relative;">
+                        <div class="card-top-left">
+                            <div>${card.rank}</div>
+                            <div class="card-suit-small">${suitIcon}</div>
+                        </div>
+                        <div class="card-center" style="${card.rank === 'A' ? 'font-size:calc(var(--card-w) * 0.8);' : ''}">${centerContent}</div>
+                    </div>
+                `;
+            } else {
+                // Kartu tertutup (face-down) dengan latar belakang solid dan tepat satu buah bintang
+                el.innerHTML = `
+                    <div class="card-content" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;">
+                        <span style="font-size: calc(var(--card-w) * 0.45); opacity: 0.9;">🌟</span>
+                    </div>
+                `;
+            }
+
+            // Positioning (Tumpukan bertumpuk)
+            if (pileType === 'tableau') {
+                const cardH = document.querySelector('.pile-slot').clientHeight;
+                let topOffset = 0;
+                for(let i=0; i<cardIndexInPile; i++) {
+                    topOffset += state.tableau[pileIndex][i].isFaceUp ? (cardH * 0.25) : (cardH * 0.1);
+                }
+                
+                el.style.top = `${topOffset}px`;
+                el.style.left = '0px';
+                el.style.zIndex = cardIndexInPile;
+            } else if (pileType === 'stock') {
+                // Efek tumpukan rapi dengan offset kecil tanpa mengubah ukuran kartu (tetap 100% ukuran normal)
+                const maxShow = Math.min(5, state.stock.length);
+                const offsetStep = 1.5; 
+                const stackIndex = Math.min(cardIndexInPile, maxShow - 1);
+                
+                el.style.top = `${stackIndex * offsetStep}px`;
+                el.style.left = `${stackIndex * offsetStep}px`;
+                el.style.zIndex = cardIndexInPile;
+            } else if (pileType === 'waste') {
+                const maxDisplay = Math.min(3, cardIndexInPile + 1);
+                const shiftX = (cardIndexInPile - (state.waste.length - maxDisplay)) * 15;
+                if(shiftX > 0) el.style.left = `${Math.min(shiftX, 30)}px`;
+                el.style.top = '0px';
+                el.style.zIndex = cardIndexInPile;
+            } else {
+                el.style.top = '0';
+                el.style.left = '0';
+                el.style.zIndex = cardIndexInPile;
+            }
+
+            if (selection && selection.pileType === pileType && selection.pileIndex === pileIndex && cardIndexInPile >= selection.cardIndex) {
+                el.classList.add('selected');
+            }
+
+            el.dataset.pileType = pileType;
+            el.dataset.pileIndex = pileIndex;
+            el.dataset.cardIndex = cardIndexInPile;
+
+            el.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                if (pileType === 'stock') {
+                    handleStockClick();
+                    return;
+                }
+                handlePointerDown(e, card, pileType, pileIndex, cardIndexInPile);
+            });
+
+            return el;
+        }
+
+        function renderAll() {
+            clearAllDOM();
+            
+            // Render Stock (tampilkan beberapa kartu teratas untuk efek tumpukan realistis)
+            const stockPile = document.getElementById('stock-pile');
+            if (state.stock.length > 0) {
+                // Tampilkan maksimal 5 kartu terbawah di stock untuk memberi kesan tumpukan tebal
+                const startIdx = Math.max(0, state.stock.length - 5);
+                for (let i = startIdx; i < state.stock.length; i++) {
+                    stockPile.appendChild(createCardDOM(state.stock[i], 'stock', 0, i));
+                }
+            }
+
+            // Render Waste (tunjukkan 1-3 kartu teratas)
+            const wastePile = document.getElementById('waste-pile');
+            const wasteStart = Math.max(0, state.waste.length - 3);
+            for (let i = wasteStart; i < state.waste.length; i++) {
+                wastePile.appendChild(createCardDOM(state.waste[i], 'waste', 0, i));
+            }
+
+            // Render Foundations
+            for (let i = 0; i < 4; i++) {
+                const p = document.getElementById(`foundation-${i}`);
+                if (state.foundations[i].length > 0) {
+                    p.appendChild(createCardDOM(state.foundations[i][state.foundations[i].length - 1], 'foundation', i, state.foundations[i].length - 1));
+                }
+            }
+
+            // Render Tableau
+            for (let i = 0; i < 7; i++) {
+                const p = document.getElementById(`tableau-${i}`);
+                for (let j = 0; j < state.tableau[i].length; j++) {
+                    p.appendChild(createCardDOM(state.tableau[i][j], 'tableau', i, j));
+                }
+            }
+        }
+
+        
+        function saveHistory() {
+            // Deep copy state sederhana (karena objek berisi primitif array)
+            const snap = {
+                stock: [...state.stock],
+                waste: [...state.waste],
+                foundations: state.foundations.map(p => [...p]),
+                tableau: state.tableau.map(p => p.map(c => ({...c}))) // copy properties like isFaceUp
+            };
+            history.push({ state: snap, score: score });
+            if(history.length > 10) history.shift(); // Max 10 undo
+            btnUndo.disabled = false;
+        }
+
+        function undo() {
+            if(history.length === 0) return;
+            const snap = history.pop();
+            
+            // Restore state
+            state.stock = [...snap.state.stock];
+            state.waste = [...snap.state.waste];
+            state.foundations = snap.state.foundations.map(p => [...p]);
+            state.tableau = snap.state.tableau.map(p => p.map(c => ({...c})));
+            
+            score = snap.score;
+            updateScore(0);
+            selection = null;
+            
+            if(history.length === 0) btnUndo.disabled = true;
+            renderAll();
+        }
+
+        function updateScore(points) {
+            score = Math.max(0, score + points);
+            scoreEl.textContent = score;
+            if(points > 0) playSound('score');
+        }
+
+        // Cek bisa diletakkan di Tableau? (Warna beda, Nilai -1)
+        function canPlaceTableau(topCard, bottomCard) {
+            if (!bottomCard) return topCard.value === 13; // Jika kosong, hanya K (King)
+            return (topCard.color !== bottomCard.color) && (topCard.value === bottomCard.value - 1);
+        }
+
+        // Cek bisa masuk Foundation? (Suit sama, Nilai +1)
+        function canPlaceFoundation(card, foundationPile) {
+            if (foundationPile.length === 0) return card.value === 1; // Jika kosong, hanya A
+            const top = foundationPile[foundationPile.length - 1];
+            return (card.suit === top.suit) && (card.value === top.value + 1);
+        }
+
+        // Helper untuk mengambil array tumpukan yang benar dari state
+        function getPile(type, index) {
+            const key = type === 'foundation' ? 'foundations' : type;
+            if (key === 'stock' || key === 'waste') return state[key];
+            return state[key][index];
+        }
+
+        function handleStockClick() {
+            clearSelection();
+            saveHistory();
+            
+            if (state.stock.length > 0) {
+                // Pindah kartu dari Stock ke Waste (sesuai mode 1 atau 3)
+                const cardsToDraw = Math.min(drawMode, state.stock.length);
+                for (let i = 0; i < cardsToDraw; i++) {
+                    let card = state.stock.pop();
+                    card.isFaceUp = true;
+                    state.waste.push(card);
+                }
+                playSound('card');
+            } else if (state.waste.length > 0) {
+                // Kembalikan Waste ke Stock (Hukuman skor di Klondike standar)
+                while (state.waste.length > 0) {
+                    let card = state.waste.pop();
+                    card.isFaceUp = false;
+                    state.stock.push(card);
+                }
+                updateScore(-20); // Penalti mereset stock
+                playSound('card');
+            }
+            renderAll();
+        }
+
+        function clearSelection() {
+            selection = null;
+        }
+
+        // --- DRAG AND DROP LOGIC ---
+        
+        function handlePointerDown(e, card, pileType, pileIndex, cardIndexInPile) {
+            // 1. Jika kartu tertutup (di ujung tableau), balikkan
+            if (!card.isFaceUp && pileType === 'tableau' && cardIndexInPile === state.tableau[pileIndex].length - 1) {
+                saveHistory();
+                card.isFaceUp = true;
+                updateScore(5);
+                playSound('card');
+                clearSelection();
+                renderAll();
+                return;
+            }
+
+            if (!card.isFaceUp) return;
+
+            // Tentukan kartu mana yang ditarik (kartu ini dan yang menumpuk di atasnya)
+            let cardsToDrag = [];
+            if (pileType === 'tableau') {
+                cardsToDrag = state.tableau[pileIndex].slice(cardIndexInPile);
+            } else if (pileType === 'waste') {
+                if (cardIndexInPile !== state.waste.length - 1) return; // Hanya kartu teratas yang bisa ditarik
+                cardsToDrag = [card];
+            } else if (pileType === 'foundation') {
+                if (cardIndexInPile !== state.foundations[pileIndex].length - 1) return; // Hanya kartu teratas
+                cardsToDrag = [card];
+            }
+
+            if (cardsToDrag.length === 0) return;
+
+            dragState = {
+                pileType, pileIndex, cardIndex: cardIndexInPile,
+                cards: cardsToDrag,
+                startX: e.clientX, startY: e.clientY,
+                elements: cardsToDrag.map(c => document.getElementById(c.id))
+            };
+
+            // Beri visual efek sedang ditarik (z-index tinggi, box-shadow)
+            dragState.elements.forEach(el => {
+                el.style.transition = 'none'; // Matikan transisi agar mengikuti jari tanpa jeda
+                el.classList.add('dragging');
+            });
+
+            // Pasang event ke document agar jari bisa keluar dari elemen kartu
+            document.addEventListener('pointermove', handlePointerMove);
+            document.addEventListener('pointerup', handlePointerUp);
+            document.addEventListener('pointercancel', handlePointerUp);
+        }
+
+        function handlePointerMove(e) {
+            if (!dragState) return;
+            const dx = e.clientX - dragState.startX;
+            const dy = e.clientY - dragState.startY;
+
+            // Pindahkan setiap kartu yang sedang ditarik secara visual
+            dragState.elements.forEach(el => {
+                el.style.transform = `translate(${dx}px, ${dy}px) scale(1.05)`;
+            });
+        }
+
+        function handlePointerUp(e) {
+            if (!dragState) return;
+            
+            document.removeEventListener('pointermove', handlePointerMove);
+            document.removeEventListener('pointerup', handlePointerUp);
+            document.removeEventListener('pointercancel', handlePointerUp);
+
+            const dx = e.clientX - dragState.startX;
+            const dy = e.clientY - dragState.startY;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+
+            // Jika pergerakan sangat kecil (di bawah 5px), anggap ini sebagai TAP/KLIK biasa
+            if (distance < 5) {
+                dragState.elements.forEach(el => {
+                    el.style.transition = '';
+                    el.style.transform = '';
+                    el.classList.remove('dragging');
+                });
+                const { cards, pileType, pileIndex, cardIndex } = dragState;
+                dragState = null;
+                handleCardClick(cards[0], pileType, pileIndex, cardIndex);
+                return;
+            }
+
+            // --- LOGIKA DROP ---
+            
+            // Cari elemen apa yang berada tepat di bawah kursor jari/mouse saat dilepas
+            const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+            const targetElement = dropTarget ? dropTarget.closest('.card, .pile-slot') : null;
+            
+            let success = false;
+
+            if (targetElement) {
+                const targetPileType = targetElement.dataset.pileType;
+                const targetPileIndex = parseInt(targetElement.dataset.pileIndex);
+                
+                // Jangan lakukan apa-apa jika dijatuhkan di tumpukan asalnya sendiri
+                if (!(targetPileType === dragState.pileType && targetPileIndex === dragState.pileIndex)) {
+                    
+                    const topMovingCard = dragState.cards[0];
+                    // Atur seleksi secara manual ke drag state agar fungsi executeMove bisa dipakai ulang
+                    selection = { pileType: dragState.pileType, pileIndex: dragState.pileIndex, cardIndex: dragState.cardIndex };
+
+                    if (targetPileType === 'tableau') {
+                        const targetPile = state.tableau[targetPileIndex];
+                        const targetCard = targetPile.length > 0 ? targetPile[targetPile.length - 1] : null;
+                        
+                        if (canPlaceTableau(topMovingCard, targetCard)) {
+                            executeMove(targetPileType, targetPileIndex, dragState.cards);
+                            success = true;
+                        }
+                    } else if (targetPileType === 'foundation' && dragState.cards.length === 1) {
+                        // Foundation hanya menerima 1 kartu sekali masuk
+                        if (canPlaceFoundation(topMovingCard, state.foundations[targetPileIndex])) {
+                            executeMove(targetPileType, targetPileIndex, dragState.cards);
+                            success = true;
+                            updateScore(10);
+                        }
+                    }
+                }
+            }
+
+            if (success) {
+                checkWin();
+            } else {
+                playSound('error');
+            }
+
+            // Bersihkan state drag dan render ulang
+            dragState = null;
+            clearSelection();
+            renderAll(); // Wajib dirender ulang agar kartu snap (terkunci) ke posisi CSS absolut aslinya
+        }
+
+        // Klik pada area/slot tumpukan kosong (Tableau/Foundation)
+        function handlePileClick(pileType, pileIndex) {
+            if (!selection) return;
+
+            // Dapatkan kartu yg diseleksi
+            const selArray = getPile(selection.pileType, selection.pileIndex);
+            const cardsToMove = selArray.slice(selection.cardIndex);
+            const topMovingCard = cardsToMove[0];
+
+            let success = false;
+
+            if (pileType === 'tableau') {
+                const targetPile = state.tableau[pileIndex];
+                const targetCard = targetPile.length > 0 ? targetPile[targetPile.length - 1] : null;
+
+                if (canPlaceTableau(topMovingCard, targetCard)) {
+                    executeMove(pileType, pileIndex, cardsToMove);
+                    success = true;
+                }
+            } else if (pileType === 'foundation') {
+                // Foundation hanya menerima 1 kartu sekali jalan
+                if (cardsToMove.length === 1) {
+                    if (canPlaceFoundation(topMovingCard, state.foundations[pileIndex])) {
+                        executeMove(pileType, pileIndex, cardsToMove);
+                        success = true;
+                        updateScore(10); // Poin masuk foundation
+                    }
+                }
+            }
+
+            if (!success) {
+                playSound('error');
+            }
+            clearSelection();
+            renderAll();
+        }
+
+        // --- FITUR HINT (PETUNJUK) ---
+        function findHint() {
+            // 1. Cek apakah ada kartu di waste atau tableau yang bisa ke foundation
+            const checkSources = [];
+            if (state.waste.length > 0) {
+                checkSources.push({ type: 'waste', index: 0, card: state.waste[state.waste.length - 1] });
+            }
+            for (let i = 0; i < 7; i++) {
+                const pile = state.tableau[i];
+                if (pile.length > 0) {
+                    // Cari kartu terbuka terbawah atau di tableau yang bisa dipindah
+                    for (let j = 0; j < pile.length; j++) {
+                        if (pile[j].isFaceUp) {
+                            checkSources.push({ type: 'tableau', index: i, cardIndex: j, card: pile[j] });
+                        }
+                    }
+                }
+            }
+
+            // Cek kecocokan ke Foundation
+            for (let src of checkSources) {
+                for (let f = 0; f < 4; f++) {
+                    if (canPlaceFoundation(src.card, state.foundations[f])) {
+                        return { from: src, toType: 'foundation', toIndex: f };
+                    }
+                }
+            }
+
+            // 2. Cek apakah ada kartu antar tableau yang bisa dipindah
+            for (let i = 0; i < 7; i++) {
+                const srcPile = state.tableau[i];
+                // Cari blok kartu terbuka pertama dari atas
+                let firstFaceUpIdx = -1;
+                for (let j = 0; j < srcPile.length; j++) {
+                    if (srcPile[j].isFaceUp) { firstFaceUpIdx = j; break; }
+                }
+                if (firstFaceUpIdx === -1) continue;
+                // Jangan pindahkan jika itu sudah kartu paling bawah dari kolom asal (kecuali King ke kolom kosong)
+                let movingCard = srcPile[firstFaceUpIdx];
+
+                for (let t = 0; t < 7; t++) {
+                    if (i === t) continue;
+                    const targetPile = state.tableau[t];
+                    const targetCard = targetPile.length > 0 ? targetPile[targetPile.length - 1] : null;
+
+                    if (canPlaceTableau(movingCard, targetCard)) {
+                        // Hindari hint memindahkan King dari satu kolom kosong ke kolom kosong lain
+                        if (movingCard.value === 13 && firstFaceUpIdx === 0 && targetPile.length === 0) continue;
+                        return { from: { type: 'tableau', index: i, cardIndex: firstFaceUpIdx, card: movingCard }, toType: 'tableau', toIndex: t };
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        function handleHintClick() {
+            clearSelection();
+            const hint = findHint();
+            if (!hint) {
+                playSound('error');
+                alert("Tidak ada langkah yang disarankan saat ini. Coba buka kartu tertutup atau tarik dari tumpokan!");
+                return;
+            }
+
+            playSound('score');
+            // Beri highlight visual sementara pada kartu sumber hint
+            let cardObj = hint.from.card;
+            let el = document.getElementById(cardObj.id);
+            if (el) {
+                el.classList.add('selected');
+                setTimeout(() => {
+                    el.classList.remove('selected');
+                }, 1200);
+            }
+        }
+
+        // Klik pada kartu
+        function handleCardClick(card, pileType, pileIndex, cardIndexInPile) {
+            // 1. Jika kartu tertutup (di ujung tableau), balikkan
+            if (!card.isFaceUp && pileType === 'tableau' && cardIndexInPile === state.tableau[pileIndex].length - 1) {
+                saveHistory();
+                card.isFaceUp = true;
+                updateScore(5);
+                playSound('card');
+                clearSelection();
+                renderAll();
+                return;
+            }
+
+            // Tidak bisa klik kartu tertutup yang bukan di ujung
+            if (!card.isFaceUp) return;
+
+            // 2. Ada seleksi aktif dan kita mengklik kartu tujuan (Tableau atau Foundation)
+            if (selection && selection.pileType !== 'stock') {
+                // Cek apakah klik kartu di pile yang *berbeda* untuk dipindahkan
+                if (selection.pileType !== pileType || selection.pileIndex !== pileIndex) {
+                    handlePileClick(pileType, pileIndex);
+                    return; 
+                }
+                // Jika klik tumpukan sendiri, batal seleksi
+                clearSelection();
+                renderAll();
+                return;
+            }
+
+            // 3. AUTO-MOVE Cerdas: Coba lempar langsung ke Foundation!
+            // Sangat berguna untuk HP agar tidak perlu 2x tap jika tujuannya jelas
+            const currentPile = getPile(pileType, pileIndex);
+            if (cardIndexInPile === currentPile.length - 1) { // Hanya kartu teratas
+                for (let f = 0; f < 4; f++) {
+                    if (canPlaceFoundation(card, state.foundations[f])) {
+                        saveHistory();
+                        // Pindahkan ke foundation
+                        const movedCard = currentPile.pop();
+                        state.foundations[f].push(movedCard);
+                        updateScore(10);
+                        playSound('card');
+                        clearSelection();
+                        renderAll();
+                        checkWin();
+                        return;
+                    }
+                }
+            }
+
+            // 4. Pilih Kartu (Sorot)
+            // Foundation tidak perlu diseleksi untuk pindah (biasanya)
+            if (pileType !== 'foundation') {
+                playSound('card');
+                selection = { pileType, pileIndex, cardIndex: cardIndexInPile };
+                renderAll();
+            }
+        }
+
+        // Melakukan perpindahan kartu dari asal ke tujuan
+        function executeMove(targetPileType, targetPileIndex, cardsToMove) {
+            saveHistory();
+            
+            // Hapus dari asal
+            const sourcePile = getPile(selection.pileType, selection.pileIndex);
+            sourcePile.splice(selection.cardIndex, cardsToMove.length);
+
+            // Tambah ke tujuan
+            const targetPile = getPile(targetPileType, targetPileIndex);
+            targetPile.push(...cardsToMove);
+            playSound('card');
+            
+            // Scoring
+            if(selection.pileType === 'waste' && targetPileType === 'tableau') updateScore(5);
+        }
+
+        function checkWin() {
+            let totalInFoundation = 0;
+            for (let i = 0; i < 4; i++) {
+                totalInFoundation += state.foundations[i].length;
+            }
+            
+            if (totalInFoundation === 52) {
+                clearInterval(timerInterval);
+                document.getElementById('final-score').textContent = score;
+                document.getElementById('modal').classList.add('show');
+            }
+        }
+
+        // Auto-complete (Opsional, jika semua kartu di tableau sudah terbuka)
+        // Fitur ini mempercepat endgame
+        setInterval(() => {
+            if(state.stock.length === 0 && state.waste.length === 0) {
+                let allFaceUp = true;
+                for(let i=0; i<7; i++) {
+                    if(state.tableau[i].some(c => !c.isFaceUp)) {
+                        allFaceUp = false; break;
+                    }
+                }
+                
+                // Jika semua face up dan tidak ada seleksi, otomatis lemparkan 1 kartu yang valid ke foundation
+                if(allFaceUp && !selection) {
+                     for(let i=0; i<7; i++) {
+                         let t = state.tableau[i];
+                         if(t.length > 0) {
+                             let topCard = t[t.length-1];
+                             for(let f=0; f<4; f++) {
+                                 if(canPlaceFoundation(topCard, state.foundations[f])) {
+                                     let moved = t.pop();
+                                     state.foundations[f].push(moved);
+                                     updateScore(10);
+                                     playSound('card');
+                                     renderAll();
+                                     checkWin();
+                                     return; // 1 kartu per interval
+                                 }
+                             }
+                         }
+                     }
+                }
+            }
+        }, 1000);
+
+        // Event Listeners Buttons
+        document.getElementById('btn-mode').addEventListener('click', () => {
+            if(confirm("Mengubah mode akan mengulang permainan dari awal. Lanjutkan?")) {
+                drawMode = drawMode === 1 ? 3 : 1;
+                document.getElementById('btn-mode').textContent = drawMode === 1 ? '🎴 Ambil 1' : '🎴 Ambil 3';
+                initGame();
+            }
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            if(confirm("Yakin ingin mengulang permainan?")) initGame();
+        });
+        btnUndo.addEventListener('click', undo);
+        btnHint.addEventListener('click', handleHintClick);
+
+        // Resize handler untuk recalculate ukuran
+        window.addEventListener('resize', () => {
+            renderAll(); // Re-render karena ada inline style top/left berbasis persentase logic di JS
+        });
+
+        // Start
+        window.onload = initGame;
+
+    </script>
+</body>
+</html>

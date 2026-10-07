@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji Mahjong Solitaire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --tile-width: 60px;
+            --tile-height: 80px;
+            --tile-depth: 10px;
+            --board-bg: #1e40af; /* Blue background */
+            --tile-color: #fdfbf7;
+            --tile-shadow: #d1d5db;
+            --tile-hover: #f3f4f6;
+            --tile-selected: #fef08a;
+            --tile-disabled-overlay: rgba(0, 0, 0, 0.4);
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: var(--board-bg);
+            background-image: radial-gradient(circle at center, #1e3a8a 0%, #0f172a 100%);
+            color: white;
+            overflow: hidden; /* Prevent default scrolling */
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            touch-action: none; /* Crucial for custom pinch/zoom/pan */
+        }
+
+        h1 {
+            font-family: 'Fredoka One', cursive;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        #game-wrapper {
+            flex-grow: 1;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Hide overflow for custom panning */
+            position: relative;
+            background: rgba(0,0,0,0.1);
+        }
+
+        #board-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform-origin: center center;
+            /* transform will be applied via JS */
+        }
+
+        #board {
+            position: relative;
+            /* Dimensions will be set dynamically based on layout */
+            transform-style: preserve-3d;
+            /* Centering trick: translate -50% -50% to align center point to top/left of board-container */
+            transform: translate(-50%, -50%); 
+        }
+
+        .mahjong-tile {
+            position: absolute;
+            width: var(--tile-width);
+            height: var(--tile-height);
+            background-color: var(--tile-color);
+            border-radius: 8px;
+            box-shadow: 
+                -2px 2px 0px 0px #e5e7eb,
+                -4px 4px 0px 0px #d1d5db,
+                -5px 5px 5px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5rem; /* Size for emojis */
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s ease, top 0.3s ease, left 0.3s ease, transform 0.3s ease;
+            transform-style: preserve-3d;
+            border: 1px solid #e5e7eb;
+        }
+
+        /* The 3D side effect */
+        .mahjong-tile::before {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            height: var(--tile-depth);
+            background-color: #cbd5e1;
+            transform-origin: top;
+            transform: rotateX(-90deg);
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+        }
+
+        .mahjong-tile::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -var(--tile-depth);
+            width: var(--tile-depth);
+            height: 100%;
+            background-color: #e2e8f0;
+            transform-origin: right;
+            transform: rotateY(-90deg);
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+        }
+
+        .mahjong-tile:hover:not(.disabled) {
+            transform: translate(2px, -2px) translateZ(5px);
+            background-color: var(--tile-hover);
+            box-shadow: 
+                -4px 4px 0px 0px #e5e7eb,
+                -6px 6px 0px 0px #d1d5db,
+                -8px 8px 10px rgba(0,0,0,0.4);
+        }
+
+        .mahjong-tile.selected {
+            background-color: var(--tile-selected);
+            transform: translate(2px, -2px) translateZ(10px);
+            border-color: #eab308;
+            box-shadow: 
+                0 0 15px rgba(250, 204, 21, 0.8),
+                -4px 4px 0px 0px #fde047,
+                -6px 6px 0px 0px #fef08a,
+                -8px 8px 10px rgba(0,0,0,0.4);
+        }
+
+        /* Disabled tiles (covered or blocked) */
+        .mahjong-tile.disabled {
+            cursor: not-allowed;
+            filter: brightness(0.7);
+        }
+        
+        /* Darken overlay for visually indicating it's blocked */
+        .mahjong-tile.disabled .tile-content {
+            opacity: 0.5;
+        }
+
+        /* Animation for removing matched tiles */
+        @keyframes fadeOutUp {
+            to {
+                opacity: 0;
+                transform: translateY(-50px) scale(0.8) translateZ(20px);
+            }
+        }
+        .mahjong-tile.removing {
+            animation: fadeOutUp 0.4s forwards ease-in;
+            pointer-events: none;
+        }
+
+        /* Hint animation */
+        @keyframes pulse-hint {
+            0% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.05) translateZ(5px); filter: brightness(1.2); box-shadow: 0 0 15px rgba(255,255,255,0.8); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+        .mahjong-tile.hint {
+            animation: pulse-hint 1s infinite;
+            z-index: 100 !important; /* Ensure hint is visible */
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            pointer-events: none; /* Let clicks pass through to game */
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            z-index: 1000;
+            box-sizing: border-box;
+        }
+        
+        .top-ui {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: auto;
+        }
+
+        .bottom-ui {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            pointer-events: auto;
+            padding-bottom: 20px; /* Safe area */
+        }
+
+        .ui-panel {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(5px);
+            padding: 0.5rem 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
+        }
+
+        .btn {
+            font-family: 'Fredoka One', cursive;
+            transition: all 0.2s;
+            padding: 12px 20px;
+            border-radius: 999px; /* Pill shape */
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .btn:hover {
+            transform: scale(1.05);
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* Small button variant */
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 0.9rem;
+            border-radius: 8px;
+        }
+
+        /* Message Box */
+        #message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: rgba(30, 64, 175, 0.95);
+            padding: 2rem 3rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 4px solid #60a5fa;
+            text-align: center;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #message-box.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+            pointer-events: auto;
+        }
+        
+        /* Helper text for mobile */
+        #mobile-hint {
+            position: absolute;
+            bottom: 80px;
+            width: 100%;
+            text-align: center;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.6);
+            pointer-events: none;
+        }
+
+        /* Responsiveness for smaller screens */
+        @media (max-width: 768px) {
+            :root {
+                --tile-width: 50px; 
+                --tile-height: 70px;
+                --tile-depth: 8px;
+            }
+            .mahjong-tile {
+                font-size: 2.2rem;
+                border-radius: 6px;
+            }
+            h1 { font-size: 1.2rem; margin-bottom: 0;}
+            .ui-panel { padding: 0.5rem; }
+            .bottom-ui { flex-wrap: wrap; }
+            .btn { padding: 10px 16px; font-size: 1rem;}
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div class="top-ui">
+            <div class="ui-panel flex flex-col items-center">
+                <h1 class="text-xl text-yellow-400">Emoji Mahjong</h1>
+            </div>
+            <div class="ui-panel flex flex-col items-end">
+                <div class="text-md font-bold">Skor: <span id="score" class="text-yellow-300">0</span></div>
+                <div class="text-xs text-gray-300">Pasangan: <span id="pairs-left">0</span></div>
+            </div>
+        </div>
+
+        <div id="mobile-hint">Gunakan 2 jari untuk zoom, geser 1 jari untuk memindahkan</div>
+
+        <div id="controls" class="bottom-ui">
+            <button id="btn-shuffle" class="btn bg-blue-600 hover:bg-blue-500 text-white border border-blue-400">
+                🔀 Acak
+            </button>
+            <button id="btn-hint" class="btn bg-green-600 hover:bg-green-500 text-white border border-green-400">
+                💡 Hint
+            </button>
+            <button id="btn-restart" class="btn bg-red-600 hover:bg-red-500 text-white border border-red-400 p-2">
+                🔄
+            </button>
+        </div>
+    </div>
+
+    <div id="game-wrapper">
+        <div id="board-container">
+            <div id="board">
+                <!-- Tiles will be injected here by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Message Box for Win/No Moves -->
+    <div id="message-box">
+        <h2 id="message-title" class="text-4xl font-bold mb-4 font-[Fredoka One] text-yellow-300">Sukses!</h2>
+        <p id="message-text" class="text-xl mb-6">Kamu telah menyelesaikan papan ini.</p>
+        <button id="btn-msg-action" class="btn bg-yellow-500 hover:bg-yellow-400 text-blue-900 font-bold py-3 px-6 rounded-full text-xl shadow-xl">
+            Main Lagi
+        </button>
+    </div>
+
+    <script>
+        // Configuration
+        const TILE_WIDTH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile-width')) || 50; 
+        const TILE_HEIGHT = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile-height')) || 70;
+
+        // Emoticon Set
+        const EMOJIS = [
+            '😀', '😂', '😎', '😍', '🤔', '😴', '😷', '🤢', '🤯',
+            '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨',
+            '🍎', '🍌', '🍉', '🍇', '🍓', '🍒', '🍑', '🍍', '🥝',
+            '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒',
+            '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🎱'
+        ];
+
+        // New Compact "Tower/Pyramid" Layout
+        // Better suited for mobile portrait screens.
+        // Format: [layer (z), x, y]
+        const COMPACT_TOWER_LAYOUT = [
+            // Layer 0 (Base - 6x6 square roughly, but shaped to allow edge matching)
+            [0, 1, 0], [0, 2, 0], [0, 3, 0], [0, 4, 0], [0, 5, 0], [0, 6, 0],
+            [0, 1, 1], [0, 2, 1], [0, 3, 1], [0, 4, 1], [0, 5, 1], [0, 6, 1],
+            [0, 0, 2], [0, 1, 2], [0, 2, 2], [0, 3, 2], [0, 4, 2], [0, 5, 2], [0, 6, 2], [0, 7, 2],
+            [0, 0, 3], [0, 1, 3], [0, 2, 3], [0, 3, 3], [0, 4, 3], [0, 5, 3], [0, 6, 3], [0, 7, 3],
+            [0, 0, 4], [0, 1, 4], [0, 2, 4], [0, 3, 4], [0, 4, 4], [0, 5, 4], [0, 6, 4], [0, 7, 4],
+            [0, 1, 5], [0, 2, 5], [0, 3, 5], [0, 4, 5], [0, 5, 5], [0, 6, 5],
+            [0, 1, 6], [0, 2, 6], [0, 3, 6], [0, 4, 6], [0, 5, 6], [0, 6, 6],
+
+            // Layer 1 (Slightly smaller, 4x4ish)
+            [1, 2, 1], [1, 3, 1], [1, 4, 1], [1, 5, 1],
+            [1, 2, 2], [1, 3, 2], [1, 4, 2], [1, 5, 2],
+            [1, 2, 3], [1, 3, 3], [1, 4, 3], [1, 5, 3],
+            [1, 2, 4], [1, 3, 4], [1, 4, 4], [1, 5, 4],
+            [1, 2, 5], [1, 3, 5], [1, 4, 5], [1, 5, 5],
+
+            // Layer 2 (Cross shape)
+            [2, 3, 2], [2, 4, 2],
+            [2, 2, 3], [2, 3, 3], [2, 4, 3], [2, 5, 3],
+            [2, 2, 4], [2, 3, 4], [2, 4, 4], [2, 5, 4],
+            [2, 3, 5], [2, 4, 5],
+
+            // Layer 3 (Small square)
+            [3, 3, 3], [3, 4, 3],
+            [3, 3, 4], [3, 4, 4],
+
+            // Layer 4 (Top pinnacle)
+            [4, 3.5, 3.5] // Centered over the 2x2 square below
+        ];
+
+        let tiles = []; 
+        let selectedTile = null;
+        let score = 0;
+        let pairsLeft = 0;
+        
+        // Panning and Zooming state
+        let currentScale = 1;
+        let currentPanX = 0;
+        let currentPanY = 0;
+        let isDragging = false;
+        let startDragX = 0;
+        let startDragY = 0;
+        let initialPinchDistance = null;
+        let initialScale = 1;
+
+        const boardEl = document.getElementById('board');
+        const boardContainerEl = document.getElementById('board-container');
+        const gameWrapperEl = document.getElementById('game-wrapper');
+        const scoreEl = document.getElementById('score');
+        const pairsLeftEl = document.getElementById('pairs-left');
+        const msgBox = document.getElementById('message-box');
+        const msgTitle = document.getElementById('message-title');
+        const msgText = document.getElementById('message-text');
+
+        // Sounds (Using Web Audio API synthesis for self-containment)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playTone(freq, type, duration, vol=0.1) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        const soundSelect = () => playTone(600, 'sine', 0.1);
+        const soundMatch = () => { playTone(800, 'sine', 0.1); setTimeout(()=>playTone(1200, 'sine', 0.2), 100); };
+        const soundError = () => playTone(200, 'sawtooth', 0.2, 0.05);
+
+        function applyTransform() {
+            // Limit scale
+            currentScale = Math.max(0.3, Math.min(currentScale, 3));
+            boardContainerEl.style.transform = `translate(${currentPanX}px, ${currentPanY}px) scale(${currentScale})`;
+        }
+
+        function resetView() {
+            // Calculate scale to fit screen initially
+            if(tiles.length === 0) return;
+            
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            tiles.forEach(t => {
+                minX = Math.min(minX, t.x);
+                maxX = Math.max(maxX, t.x);
+                minY = Math.min(minY, t.y);
+                maxY = Math.max(maxY, t.y);
+            });
+
+            // Actual pixel dimensions of the layout
+            const layoutPixelWidth = (maxX - minX + 1) * TILE_WIDTH;
+            const layoutPixelHeight = (maxY - minY + 1) * TILE_HEIGHT;
+
+            const wrapperWidth = gameWrapperEl.clientWidth;
+            const wrapperHeight = gameWrapperEl.clientHeight;
+            
+            // Allow some padding (e.g., 90% of screen)
+            const scaleX = (wrapperWidth * 0.9) / layoutPixelWidth;
+            const scaleY = (wrapperHeight * 0.7) / layoutPixelHeight; // More padding top/bottom for UI
+            
+            currentScale = Math.min(scaleX, scaleY, 1.2); // Don't scale up too much initially
+            currentPanX = 0;
+            currentPanY = 0;
+            applyTransform();
+        }
+
+        // Pointer Events for Dragging and Pinch Zooming
+        let activePointers = new Map();
+
+        gameWrapperEl.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.mahjong-tile') || e.target.closest('.btn')) return; // Ignore if clicking tile or button
+            
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            
+            if (activePointers.size === 1) {
+                isDragging = true;
+                startDragX = e.clientX - currentPanX;
+                startDragY = e.clientY - currentPanY;
+            } else if (activePointers.size === 2) {
+                isDragging = false; // Switch to zooming
+                const points = Array.from(activePointers.values());
+                initialPinchDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+                initialScale = currentScale;
+            }
+        });
+
+        gameWrapperEl.addEventListener('pointermove', (e) => {
+            if (!activePointers.has(e.pointerId)) return;
+            
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (isDragging && activePointers.size === 1) {
+                currentPanX = e.clientX - startDragX;
+                currentPanY = e.clientY - startDragY;
+                applyTransform();
+            } else if (activePointers.size === 2) {
+                const points = Array.from(activePointers.values());
+                const currentPinchDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+                
+                if (initialPinchDistance) {
+                    const scaleChange = currentPinchDistance / initialPinchDistance;
+                    currentScale = initialScale * scaleChange;
+                    applyTransform();
+                }
+            }
+        });
+
+        const handlePointerUp = (e) => {
+            activePointers.delete(e.pointerId);
+            if (activePointers.size < 2) {
+                initialPinchDistance = null;
+            }
+            if (activePointers.size === 0) {
+                isDragging = false;
+            }
+            // If one finger remains after pinch, reset drag start to avoid jumping
+            if(activePointers.size === 1) {
+                const remainingPointer = Array.from(activePointers.values())[0];
+                startDragX = remainingPointer.x - currentPanX;
+                startDragY = remainingPointer.y - currentPanY;
+                isDragging = true;
+            }
+        };
+
+        gameWrapperEl.addEventListener('pointerup', handlePointerUp);
+        gameWrapperEl.addEventListener('pointercancel', handlePointerUp);
+        gameWrapperEl.addEventListener('pointerleave', handlePointerUp);
+
+        // Mouse wheel zooming
+        gameWrapperEl.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomSensitivity = 0.001;
+            const delta = -e.deltaY * zoomSensitivity;
+            const newScale = currentScale * (1 + delta);
+            
+            // Adjust pan to zoom towards mouse position
+            // (Simplified for now: zooms towards center of screen)
+            currentScale = Math.max(0.3, Math.min(newScale, 3));
+            applyTransform();
+        }, { passive: false });
+
+        function initGame() {
+            msgBox.classList.remove('show');
+            boardEl.innerHTML = '';
+            tiles = [];
+            selectedTile = null;
+            score = 0;
+            updateUI();
+
+            // 1. Determine how many tiles we need based on layout
+            const layoutToUse = COMPACT_TOWER_LAYOUT;
+            const numTiles = layoutToUse.length;
+            
+            // Ensure even number (Mahjong requires pairs)
+            if (numTiles % 2 !== 0) {
+                console.error("Layout has an odd number of tiles!");
+                // Remove last tile to make it even for this simple implementation
+                layoutToUse.pop();
+            }
+
+            const numPairs = layoutToUse.length / 2;
+            pairsLeft = numPairs;
+
+            // 2. Create the tile deck
+            let deck = [];
+            // We need 4 of each emoji usually, but for arbitrary layouts, 
+            // we'll just pick random emojis and make exactly 2 of each for guaranteed pairs.
+            // Or better, to mimic Mahjong (4 of a kind), we group by 4 if possible.
+            // For simplicity and guaranteed solvability (loosely), we just ensure pairs exist.
+            
+            let emojiPool = [...EMOJIS];
+            // Shuffle emoji pool
+            emojiPool.sort(() => Math.random() - 0.5);
+
+            for (let i = 0; i < numPairs; i++) {
+                // Use an emoji. Cycle through pool if we need more pairs than unique emojis.
+                const emoji = emojiPool[i % emojiPool.length];
+                deck.push(emoji);
+                deck.push(emoji);
+            }
+
+            // Shuffle the deck
+            deck.sort(() => Math.random() - 0.5);
+
+            // 3. Create tile objects and DOM elements based on layout
+            layoutToUse.forEach((pos, index) => {
+                const z = pos[0];
+                const x = pos[1];
+                const y = pos[2];
+                const emoji = deck[index];
+                const id = `tile-${index}`;
+
+                const tile = {
+                    id: id,
+                    emoji: emoji,
+                    z: z,
+                    x: x,
+                    y: y,
+                    element: null,
+                    removed: false
+                };
+                tiles.push(tile);
+            });
+
+            // Calculate board dimensions for centering
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            tiles.forEach(t => {
+                minX = Math.min(minX, t.x);
+                maxX = Math.max(maxX, t.x);
+                minY = Math.min(minY, t.y);
+                maxY = Math.max(maxY, t.y);
+            });
+
+            const boardWidth = (maxX - minX + 1) * TILE_WIDTH;
+            const boardHeight = (maxY - minY + 1) * TILE_HEIGHT;
+            
+            boardEl.style.width = `${boardWidth}px`;
+            boardEl.style.height = `${boardHeight}px`;
+
+            // Reset camera view
+            resetView();
+
+            // Render tiles
+            tiles.forEach(tile => {
+                const el = document.createElement('div');
+                el.className = 'mahjong-tile';
+                el.id = tile.id;
+                
+                // Calculate position relative to the calculated board size
+                // x and y are grid units. We offset by minX/minY to align to top-left of board container
+                const leftPos = (tile.x - minX) * TILE_WIDTH;
+                const topPos = (tile.y - minY) * TILE_HEIGHT;
+                
+                el.style.left = `${leftPos}px`;
+                el.style.top = `${topPos}px`;
+                el.style.zIndex = tile.z * 10 + tile.y; // Layering logic (higher z layer is above, lower y is behind)
+                
+                // Content
+                const content = document.createElement('span');
+                content.className = 'tile-content';
+                content.textContent = tile.emoji;
+                el.appendChild(content);
+
+                // Interaction - using pointerup to prevent dragging causing clicks
+                let startX, startY;
+                el.addEventListener('pointerdown', (e) => {
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    // Don't prevent default here so pointer events can propagate if needed for dragging
+                });
+                
+                el.addEventListener('pointerup', (e) => {
+                    // Only trigger click if movement was small (not a drag)
+                    const diffX = Math.abs(e.clientX - startX);
+                    const diffY = Math.abs(e.clientY - startY);
+                    if (diffX < 10 && diffY < 10) {
+                         handleTileClick(tile);
+                    }
+                });
+
+                boardEl.appendChild(el);
+                tile.element = el;
+            });
+
+            updatePlayability();
+            
+            // Check if solvable initially (rare but possible to get stuck immediately on full random)
+            if (!hasAvailableMoves()) {
+                shuffleBoard(); // Auto shuffle if stuck at start
+            }
+        }
+
+        window.addEventListener('resize', () => {
+             // Re-center view on resize
+             if(tiles.length > 0) resetView();
+        });
+
+        // Mahjong Rules: A tile is playable if it's not covered by another tile,
+        // and it is free on either its left OR right side.
+        function isPlayable(tile) {
+            if (tile.removed) return false;
+
+            let covered = false;
+            let blockedLeft = false;
+            let blockedRight = false;
+
+            for (let other of tiles) {
+                if (other === tile || other.removed) continue;
+
+                // Check if covered (higher z layer, overlapping x,y)
+                // Overlap means center distance is less than 1 grid unit (since tiles are 1x1 in layout terms)
+                // We use standard collision detection logic adapted for grid offsets
+                if (other.z > tile.z) {
+                    const dx = Math.abs(other.x - tile.x);
+                    const dy = Math.abs(other.y - tile.y);
+                    // Standard tiles overlap if dx < 1 and dy < 1. 
+                    // Adjust if layouts use half steps (e.g. 0.5)
+                    if (dx < 1 && dy < 1) {
+                        covered = true;
+                        break; // If covered, it's definitively not playable
+                    }
+                }
+
+                // Check left/right blocking (same layer)
+                if (other.z === tile.z) {
+                    const dy = Math.abs(other.y - tile.y);
+                    // Only tiles on the same row (or partially overlapping row) block sides
+                    if (dy < 1) {
+                        const dx = other.x - tile.x;
+                        if (dx === -1 || (dx > -1 && dx < 0)) blockedLeft = true; // Directly to the left
+                        if (dx === 1 || (dx > 0 && dx < 1)) blockedRight = true;  // Directly to the right
+                    }
+                }
+            }
+
+            return !covered && (!blockedLeft || !blockedRight);
+        }
+
+        function updatePlayability() {
+            tiles.forEach(tile => {
+                if (!tile.removed) {
+                    if (isPlayable(tile)) {
+                        tile.element.classList.remove('disabled');
+                    } else {
+                        tile.element.classList.add('disabled');
+                        // If it was selected but became disabled (shouldn't happen in normal play, but good to safeguard)
+                        if (selectedTile === tile) {
+                            deselectTile();
+                        }
+                    }
+                }
+            });
+        }
+
+        function handleTileClick(tile) {
+            clearHints();
+
+            if (tile.removed || !isPlayable(tile)) {
+                soundError();
+                return;
+            }
+
+            if (selectedTile === null) {
+                // First tile selection
+                selectedTile = tile;
+                tile.element.classList.add('selected');
+                soundSelect();
+            } else if (selectedTile === tile) {
+                // Deselect if clicked again
+                deselectTile();
+                soundSelect();
+            } else {
+                // Second tile selection - check match
+                if (selectedTile.emoji === tile.emoji) {
+                    // Match found!
+                    removeTiles(selectedTile, tile);
+                    soundMatch();
+                } else {
+                    // No match
+                    deselectTile();
+                    // Select new one instead
+                    selectedTile = tile;
+                    tile.element.classList.add('selected');
+                    soundSelect();
+                }
+            }
+        }
+
+        function deselectTile() {
+            if (selectedTile) {
+                selectedTile.element.classList.remove('selected');
+                selectedTile = null;
+            }
+        }
+
+        function removeTiles(tile1, tile2) {
+            tile1.removed = true;
+            tile2.removed = true;
+            
+            // Visual removal
+            tile1.element.classList.remove('selected');
+            tile2.element.classList.remove('selected');
+            tile1.element.classList.add('removing');
+            tile2.element.classList.add('removing');
+
+            // Cleanup DOM after animation
+            setTimeout(() => {
+                if(tile1.element && tile1.element.parentNode) tile1.element.parentNode.removeChild(tile1.element);
+                if(tile2.element && tile2.element.parentNode) tile2.element.parentNode.removeChild(tile2.element);
+            }, 400);
+
+            selectedTile = null;
+            score += 100;
+            pairsLeft--;
+            updateUI();
+            updatePlayability();
+
+            checkGameState();
+        }
+
+        function updateUI() {
+            scoreEl.textContent = score;
+            pairsLeftEl.textContent = pairsLeft;
+        }
+
+        function getAvailableMatches() {
+            let playableTiles = tiles.filter(t => !t.removed && isPlayable(t));
+            let matches = [];
+            
+            for (let i = 0; i < playableTiles.length; i++) {
+                for (let j = i + 1; j < playableTiles.length; j++) {
+                    if (playableTiles[i].emoji === playableTiles[j].emoji) {
+                        matches.push([playableTiles[i], playableTiles[j]]);
+                    }
+                }
+            }
+            return matches;
+        }
+
+        function hasAvailableMoves() {
+            return getAvailableMatches().length > 0;
+        }
+
+        function showHint() {
+            clearHints();
+            deselectTile();
+            const matches = getAvailableMatches();
+            if (matches.length > 0) {
+                // Pick a random match
+                const match = matches[Math.floor(Math.random() * matches.length)];
+                match[0].element.classList.add('hint');
+                match[1].element.classList.add('hint');
+                score = Math.max(0, score - 20); // Penalty for using hint
+                updateUI();
+            } else {
+                showMessage("Tidak ada langkah lagi!", "Silakan Acak Ulang.", "Acak Ulang", shuffleBoard);
+            }
+        }
+
+        function clearHints() {
+            document.querySelectorAll('.hint').forEach(el => el.classList.remove('hint'));
+        }
+
+        function shuffleBoard() {
+            clearHints();
+            deselectTile();
+            
+            // Get all currently remaining tiles
+            let remainingTiles = tiles.filter(t => !t.removed);
+            
+            // Extract their emojis
+            let remainingEmojis = remainingTiles.map(t => t.emoji);
+            
+            // Shuffle the emojis array
+            remainingEmojis.sort(() => Math.random() - 0.5);
+            
+            // Reassign emojis to remaining tile objects
+            remainingTiles.forEach((tile, index) => {
+                tile.emoji = remainingEmojis[index];
+                // Update DOM content
+                tile.element.querySelector('.tile-content').textContent = tile.emoji;
+                
+                // Add a little shuffle animation
+                tile.element.style.transform = 'scale(0) rotate(180deg)';
+                setTimeout(() => {
+                    tile.element.style.transform = '';
+                }, 300);
+            });
+
+            // Penalty for shuffle
+            score = Math.max(0, score - 50);
+            updateUI();
+            updatePlayability();
+
+            if (!hasAvailableMoves()) {
+                // Highly unlikely to have no moves after shuffle if there are pairs, 
+                // but theoretically possible due to blocking. Shuffle again automatically.
+                setTimeout(shuffleBoard, 500); 
+            }
+        }
+
+        function checkGameState() {
+            if (pairsLeft === 0) {
+                showMessage("Menang!", `Luar biasa! Skor Akhir: ${score}`, "Main Lagi", initGame);
+            } else if (!hasAvailableMoves()) {
+                showMessage("Jalan Buntu", "Tidak ada langkah yang tersisa.", "Acak Papan (-50 pts)", shuffleBoard);
+            }
+        }
+
+        function showMessage(title, text, btnText, actionCallback) {
+            msgTitle.textContent = title;
+            msgText.textContent = text;
+            const btn = document.getElementById('btn-msg-action');
+            btn.textContent = btnText;
+            
+            // Remove old listener
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            
+            newBtn.addEventListener('click', () => {
+                msgBox.classList.remove('show');
+                actionCallback();
+            });
+
+            msgBox.classList.add('show');
+        }
+
+        // Event Listeners for UI buttons
+        document.getElementById('btn-shuffle').addEventListener('click', () => {
+            if (pairsLeft > 0) shuffleBoard();
+        });
+        document.getElementById('btn-hint').addEventListener('click', showHint);
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            if(confirm("Yakin ingin mengulang dari awal?")) initGame();
+        });
+
+        // Start game on load
+        window.onload = () => {
+            // Slight delay to ensure fonts/css render properly before dimension calculations
+            setTimeout(initGame, 100); 
+        };
+
+    </script>
+</body>
+</html>
