@@ -254,6 +254,57 @@
       }
     }
 
+    function spawnFood(x, y, val) {
+      foods.push({
+        x: x !== null ? x : 60 + Math.random() * (W - 120),
+        y: y !== null ? y : 60 + Math.random() * (W - 120),
+        val: val || 1,
+        emoji: FOOD_EMOJIS[Math.floor(Math.random() * FOOD_EMOJIS.length)]
+      });
+    }
+
+    function dropFood(x, y) {
+      spawnFood(
+        clamp(x + (Math.random() - 0.5) * 24, 40, W - 40),
+        clamp(y + (Math.random() - 0.5) * 24, 40, W - 40),
+        0.5
+      );
+    }
+
+    function eatFood(w) {
+      const headR = HEAD_R;
+      for (let i = 0; i < foods.length; i++) {
+        const f = foods[i];
+        const dx = f.x - w.x;
+        const dy = f.y - w.y;
+        if (dx * dx + dy * dy <= (headR + 14) * (headR + 14)) {
+          if (w.segs < MAX_SEGS) w.segs = Math.min(MAX_SEGS, w.segs + f.val);
+          w.score += f.val >= 1 ? 1 : 0.5;
+          const trailCap = Math.min(MAX_SEGS, Math.ceil(w.segs));
+          if (w.trail.length < trailCap) w.trail.push({ ...w.trail[w.trail.length - 1] });
+          foods.splice(i, 1);
+          spawnFood(null, null, 1);
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function updateHUD() {
+      document.getElementById("hudScore").textContent = Math.floor(player.score);
+      document.getElementById("hudLen").textContent = Math.ceil(player.segs);
+      document.getElementById("hudKills").textContent = player.kills;
+    }
+
+    function drawFoods() {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (const f of foods) {
+        ctx.font = (f.val >= 1 ? "18px" : "13px") + " serif";
+        ctx.fillText(f.emoji, f.x, f.y);
+      }
+    }
+
     function stepWorm(w, dt) {
       let da = w.targetAngle - w.angle;
       while (da > Math.PI) da -= Math.PI * 2;
@@ -301,9 +352,11 @@
       bots = [];
       foods = [];
       powers = [];
+      for (let i = 0; i < FOOD_COUNT; i++) spawnFood(null, null, 1);
       playTime = 0;
       hudClock = 0;
       boardClock = 0;
+      powerTimer = 8 + Math.random() * 7;
       cam = { x: player.x, y: player.y, zoom: 1 };
       state = "playing";
       show("menu", false);
@@ -312,6 +365,7 @@
       show("powerhud", true);
       show("board", true);
       show("boostBtn", true);
+      updateHUD();
       if (document.activeElement) document.activeElement.blur();
     }
 
@@ -331,6 +385,12 @@
       playTime += dt;
       readInput();
       stepWorm(player, dt);
+      eatFood(player);
+      hudClock += dt;
+      if (hudClock >= 0.2) {
+        hudClock = 0;
+        updateHUD();
+      }
       cam.zoom += (clamp(1 - player.segs / 1250, 0.6, 1) - cam.zoom) * Math.min(1, dt * 3);
       cam.x += (player.x - cam.x) * Math.min(1, dt * 8);
       cam.y += (player.y - cam.y) * Math.min(1, dt * 8);
@@ -411,6 +471,7 @@
       ctx.translate(-cam.x, -cam.y);
       drawGrid();
       drawBorder();
+      drawFoods();
       drawWorms();
       ctx.restore();
     }
