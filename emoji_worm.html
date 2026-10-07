@@ -184,7 +184,8 @@
     let powers = [];
     let cam = { x: W / 2, y: W / 2, zoom: 1 };
     let keys = {};
-    let boostHeld = false;
+    let boostKey = false;
+    let boostPtr = null;
     let joy = { active: false, id: null, ox: 0, oy: 0, angle: null };
     let playTime = 0;
     let hudClock = 0;
@@ -263,10 +264,10 @@
       });
     }
 
-    function dropFood(x, y) {
+    function dropFood(x, y, angle) {
       spawnFood(
-        clamp(x + (Math.random() - 0.5) * 24, 40, W - 40),
-        clamp(y + (Math.random() - 0.5) * 24, 40, W - 40),
+        clamp(x - Math.cos(angle) * 45 + (Math.random() - 0.5) * 16, 40, W - 40),
+        clamp(y - Math.sin(angle) * 45 + (Math.random() - 0.5) * 16, 40, W - 40),
         0.5
       );
     }
@@ -283,7 +284,7 @@
           const trailCap = Math.min(MAX_SEGS, Math.ceil(w.segs));
           if (w.trail.length < trailCap) w.trail.push({ ...w.trail[w.trail.length - 1] });
           foods.splice(i, 1);
-          spawnFood(null, null, 1);
+          if (foods.length < FOOD_COUNT) spawnFood(null, null, 1);
           return true;
         }
       }
@@ -323,18 +324,18 @@
         while (w.boostAcc >= 0.3) {
           w.boostAcc -= 0.3;
           w.segs -= 1;
-          dropFood(w.x, w.y);
+          dropFood(w.x, w.y, w.angle);
           if (w.segs <= 10) {
             w.segs = 10;
             break;
           }
         }
-      } else {
-        w.boostAcc = 0;
       }
       while (w.distAcc >= SEG_GAP) {
         w.distAcc -= SEG_GAP;
-        w.trail.unshift({ x: w.x, y: w.y });
+        const travel = sp * dt || 1;
+        const back = Math.min(1, w.distAcc / travel);
+        w.trail.unshift({ x: w.x - w.vx * dt * back, y: w.y - w.vy * dt * back });
         const cap = Math.min(MAX_SEGS, Math.ceil(w.segs));
         while (w.trail.length > cap) w.trail.pop();
       }
@@ -349,7 +350,7 @@
       if (keys["KeyS"] || keys["ArrowDown"]) dy += 1;
       if (dx || dy) player.targetAngle = Math.atan2(dy, dx);
       else if (joy.angle !== null) player.targetAngle = joy.angle;
-      player.boost = boostHeld;
+      player.boost = boostKey || boostPtr !== null;
     }
 
     window.addEventListener("keydown", (e) => {
@@ -357,16 +358,17 @@
       if (e.code.startsWith("Arrow")) e.preventDefault();
       if (e.code === "Space") {
         e.preventDefault();
-        boostHeld = true;
+        boostKey = true;
       }
     });
     window.addEventListener("keyup", (e) => {
       keys[e.code] = false;
-      if (e.code === "Space") boostHeld = false;
+      if (e.code === "Space") boostKey = false;
     });
     window.addEventListener("blur", () => {
       keys = {};
-      boostHeld = false;
+      boostKey = false;
+      boostPtr = null;
     });
 
     const joyEl = document.getElementById("joystick");
@@ -378,6 +380,7 @@
       if (e.pointerType === "mouse") return;
       if (e.target === boostBtnEl) return;
       if (e.clientX > vw * 0.6) return;
+      if (joy.active) return;
       joy.active = true;
       joy.id = e.pointerId;
       joy.ox = e.clientX;
@@ -414,14 +417,15 @@
     window.addEventListener("pointercancel", endJoy);
 
     boostBtnEl.addEventListener("pointerdown", (e) => {
+      if (state !== "playing") return;
       e.preventDefault();
-      boostHeld = true;
+      boostPtr = e.pointerId;
     });
-    window.addEventListener("pointerup", () => {
-      boostHeld = false;
+    window.addEventListener("pointerup", (e) => {
+      if (e.pointerId === boostPtr) boostPtr = null;
     });
-    window.addEventListener("pointercancel", () => {
-      boostHeld = false;
+    window.addEventListener("pointercancel", (e) => {
+      if (e.pointerId === boostPtr) boostPtr = null;
     });
 
     function startGame() {
@@ -436,6 +440,12 @@
       hudClock = 0;
       boardClock = 0;
       powerTimer = 8 + Math.random() * 7;
+      boostKey = false;
+      boostPtr = null;
+      joy.active = false;
+      joy.id = null;
+      joy.angle = null;
+      document.getElementById("joystick").style.display = "none";
       cam = { x: player.x, y: player.y, zoom: 1 };
       state = "playing";
       show("menu", false);
