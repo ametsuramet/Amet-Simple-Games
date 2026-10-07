@@ -292,6 +292,76 @@
       return false;
     }
 
+    function spawnPower() {
+      powers.push({
+        x: 200 + Math.random() * (W - 400),
+        y: 200 + Math.random() * (W - 400),
+        type: POWER_TYPES[Math.floor(Math.random() * POWER_TYPES.length)]
+      });
+    }
+
+    function eatPower(w) {
+      for (let i = 0; i < powers.length; i++) {
+        const p = powers[i];
+        const dx = p.x - w.x;
+        const dy = p.y - w.y;
+        if (dx * dx + dy * dy <= (HEAD_R + 16) * (HEAD_R + 16)) {
+          if (p.type === "star") {
+            w.segs = Math.min(MAX_SEGS, w.segs + 8);
+            w.score += 10;
+            const cap = Math.min(MAX_SEGS, Math.ceil(w.segs));
+            while (w.trail.length < cap) w.trail.push({ ...w.trail[w.trail.length - 1] });
+          } else if (p.type === "ghost") {
+            w.ghost = 5;
+          } else {
+            w.magnet = 5;
+          }
+          powers.splice(i, 1);
+          return;
+        }
+      }
+    }
+
+    function magnetPull(w, dt) {
+      if (w.magnet <= 0) return;
+      const r2 = 160 * 160;
+      for (const f of foods) {
+        const dx = w.x - f.x;
+        const dy = w.y - f.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > 0 && d2 <= r2) {
+          const d = Math.sqrt(d2);
+          const step = Math.min(300 * dt, d);
+          f.x += (dx / d) * step;
+          f.y += (dy / d) * step;
+        }
+      }
+    }
+
+    function updatePowerHUD() {
+      const el = document.getElementById("powerhud");
+      const items = [];
+      if (player.ghost > 0) items.push("👻 " + player.ghost.toFixed(1) + "s");
+      if (player.magnet > 0) items.push("🧲 " + player.magnet.toFixed(1) + "s");
+      const html = items
+        .map((t) => '<div class="rounded-full bg-slate-950/70 px-3 py-1 ring-1 ring-inset ring-white/15">' + t + "</div>")
+        .join("");
+      if (el.dataset.h !== html) {
+        el.dataset.h = html;
+        el.innerHTML = html;
+      }
+    }
+
+    function drawPowers() {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const pulse = 1 + Math.sin(playTime * 5) * 0.1;
+      for (const p of powers) {
+        ctx.font = 22 * pulse + "px serif";
+        ctx.fillText(POWER_EMOJI[p.type], p.x, p.y);
+      }
+    }
+
     function nearAny(x, y, r) {
       for (const f of foods) {
         const dx = f.x - x;
@@ -723,9 +793,21 @@
     function update(dt) {
       playTime += dt;
       readInput();
+      powerTimer -= dt;
+      if (powerTimer <= 0) {
+        powerTimer = 8 + Math.random() * 7;
+        if (powers.length < 4) spawnPower();
+      }
+      if (player.ghost > 0) player.ghost = Math.max(0, player.ghost - dt);
+      if (player.magnet > 0) player.magnet = Math.max(0, player.magnet - dt);
+      magnetPull(player, dt);
       stepWorm(player, dt);
       for (const b of bots) {
         if (b.alive) {
+          if (b.ghost > 0) b.ghost = Math.max(0, b.ghost - dt);
+          if (b.magnet > 0) b.magnet = Math.max(0, b.magnet - dt);
+          magnetPull(b, dt);
+          eatPower(b);
           botThink(b, dt);
           stepWorm(b, dt);
           eatFood(b);
@@ -740,12 +822,14 @@
         }
       }
       eatFood(player);
+      eatPower(player);
       checkCollisions();
       if (state !== "playing") return;
       hudClock += dt;
       if (hudClock >= 0.2) {
         hudClock = 0;
         updateHUD();
+        updatePowerHUD();
       }
       boardClock += dt;
       if (boardClock >= 0.5) {
@@ -833,6 +917,7 @@
       drawGrid();
       drawBorder();
       drawFoods();
+      drawPowers();
       drawWorms();
       ctx.restore();
       drawMinimap();
