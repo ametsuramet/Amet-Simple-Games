@@ -298,6 +298,119 @@
       document.getElementById("hudKills").textContent = player.kills;
     }
 
+    function killWorm(w, killer, cause, credit) {
+      if (!w.alive) return;
+      w.alive = false;
+      w.cause = cause;
+      w.respawnT = 5;
+      if (cause !== "border") {
+        const cap = Math.min(w.trail.length, Math.min(MAX_SEGS, Math.ceil(w.segs)));
+        for (let i = 0; i < cap; i++) {
+          spawnFood(w.trail[i].x, w.trail[i].y, 1);
+        }
+      }
+      if (killer && credit && killer !== w && killer.alive) {
+        killer.kills += 1;
+        killer.score += 5 + Math.floor(w.segs / 10);
+      }
+      if (w.isPlayer) endGame(cause, killer);
+    }
+
+    function endGame(cause, killer) {
+      if (state !== "playing") return;
+      state = "gameover";
+      document.getElementById("goCause").textContent =
+        cause === "border"
+          ? "Kamu menabrak border arena!"
+          : cause === "headon"
+            ? "Kepalamu bertabrakan dengan worm lain!"
+            : killer
+              ? "Kepalamu menabrak badan " + killer.emoji + "!"
+              : "Kamu menabrak badan sendiri!";
+      document.getElementById("goScore").textContent = Math.floor(player.score);
+      document.getElementById("goLen").textContent = Math.ceil(player.segs);
+      document.getElementById("goKills").textContent = player.kills;
+      document.getElementById("goTime").textContent = playTime.toFixed(1);
+      show("gameover", true);
+      show("hud", false);
+      show("powerhud", false);
+      show("board", false);
+      show("boostBtn", false);
+      boostKey = false;
+      boostPtr = null;
+      keys = {};
+      joy.active = false;
+      joy.id = null;
+      joy.angle = null;
+      document.getElementById("joystick").style.display = "none";
+    }
+
+    function checkCollisions() {
+      const all = [player].concat(bots).filter((w) => w && w.alive);
+      const dead = new Map();
+      for (const w of all) {
+        if (w.x < 0 || w.y < 0 || w.x > W || w.y > W) {
+          dead.set(w, { cause: "border", killer: null, credit: false });
+          continue;
+        }
+        let headOn = false;
+        for (const o of all) {
+          if (o === w) continue;
+          if (Math.hypot(o.x - w.x, o.y - w.y) <= HEAD_R * 2) {
+            headOn = true;
+            break;
+          }
+        }
+        if (headOn) {
+          dead.set(w, { cause: "headon", killer: null, credit: false });
+          continue;
+        }
+        if (w.ghost > 0) continue;
+        const hitR = HEAD_R + BODY_R - 6;
+        for (const o of all) {
+          if (o === w || o.ghost > 0) continue;
+          const cap = Math.min(o.trail.length, Math.min(MAX_SEGS, Math.ceil(o.segs)));
+          for (let i = 2; i < cap; i++) {
+            const p = o.trail[i];
+            const dx = p.x - w.x;
+            const dy = p.y - w.y;
+            if (dx * dx + dy * dy <= hitR * hitR) {
+              dead.set(w, { cause: "body", killer: o, credit: true });
+              break;
+            }
+          }
+          if (dead.has(w)) break;
+        }
+      }
+      const headOnDead = [...dead.entries()].filter(([, i]) => i.cause === "headon");
+      for (const [w] of headOnDead) {
+        const rivals = headOnDead
+          .map(([o]) => o)
+          .filter((o) => o !== w && Math.hypot(o.x - w.x, o.y - w.y) <= HEAD_R * 2);
+        if (rivals.length === 0) {
+          dead.set(w, { cause: "body", killer: null, credit: false });
+          continue;
+        }
+        const biggest = rivals.reduce((a, b) => (b.segs > a.segs ? b : a));
+        const ratio = Math.min(w.segs, biggest.segs) / Math.max(w.segs, biggest.segs);
+        if (ratio > 0.9) {
+          dead.set(w, { cause: "headon", killer: null, credit: false });
+        } else if (w.segs < biggest.segs) {
+          dead.set(w, { cause: "headon", killer: biggest, credit: true });
+        } else {
+          for (const o of rivals) {
+            if (o.segs < w.segs) {
+              dead.set(o, { cause: "headon", killer: w, credit: true });
+            }
+          }
+          dead.delete(w);
+        }
+      }
+      for (const [w, info] of dead) {
+        killWorm(w, info.killer, info.cause, info.credit);
+      }
+    }
+
     function drawFoods() {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -480,7 +593,12 @@
       playTime += dt;
       readInput();
       stepWorm(player, dt);
+      for (const b of bots) {
+        if (b.alive) stepWorm(b, dt);
+      }
       eatFood(player);
+      checkCollisions();
+      if (state !== "playing") return;
       hudClock += dt;
       if (hudClock >= 0.2) {
         hudClock = 0;
