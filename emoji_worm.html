@@ -533,7 +533,7 @@
       for (const w of all) {
         ctx.fillStyle = w.isPlayer ? "#f8fafc" : emojiColor(w.emoji);
         ctx.beginPath();
-        ctx.arc(x0 + w.x * sx, y0 + w.y * sx, w.isPlayer ? 5 : 3.5, 0, 7);
+        ctx.arc(x0 + w.x * sx, y0 + w.y * sx, w.isPlayer ? 5 : 3.5, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
@@ -771,7 +771,7 @@
       for (let x = x0; x <= x1; x += step) {
         for (let y = y0; y <= y1; y += step) {
           ctx.beginPath();
-          ctx.arc(x, y, 2, 0, 7);
+          ctx.arc(x, y, 2, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -799,7 +799,7 @@
         const p = w.trail[i];
         const t = 1 - i / n;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, BODY_R * (0.75 + 0.25 * t), 0, 7);
+        ctx.arc(p.x, p.y, BODY_R * (0.75 + 0.25 * t), 0, Math.PI * 2);
         ctx.fillStyle = emojiColor(w.emoji);
         ctx.fill();
         if (i > 0 && i % 5 === 0) {
