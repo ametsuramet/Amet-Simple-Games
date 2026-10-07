@@ -377,12 +377,21 @@
     }
 
     function findSpot() {
+      const all = [player].concat(bots);
       for (let i = 0; i < 40; i++) {
         const x = 400 + Math.random() * (W - 800);
         const y = 400 + Math.random() * (W - 800);
-        if (!nearAny(x, y, 420)) return { x, y };
+        if (nearAny(x, y, 150)) continue;
+        let clear = true;
+        for (const w of all) {
+          if (w && w.alive && Math.hypot(w.x - x, w.y - y) < 300) {
+            clear = false;
+            break;
+          }
+        }
+        if (clear) return { x, y };
       }
-      return { x: W / 2, y: W / 2 };
+      return { x: 400 + Math.random() * (W - 800), y: 400 + Math.random() * (W - 800) };
     }
 
     function botThink(w, dt) {
@@ -774,6 +783,7 @@
       show("board", true);
       show("boostBtn", true);
       updateHUD();
+      updatePowerHUD();
       updateBoard();
       if (document.activeElement) document.activeElement.blur();
     }
