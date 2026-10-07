@@ -1,13 +1,14 @@
 # AGENTS.md
 
-This is a static HTML games repository (three self-contained browser games). No build tools, package manager, tests, linting, or typechecking are configured.
+This is a static HTML games repository (four self-contained browser games). No build tools, package manager, tests, linting, or typechecking are configured.
 
 ## Overview
 
-The repo contains three vanilla JS + Tailwind CDN games:
+The repo contains four vanilla JS + Tailwind CDN games:
 - `emoji_mahjong.html` - Emoji Mahjong Solitaire with custom pan/zoom and 3D tile rendering
 - `emoji_solitaire.html` - Emoji-themed Klondike Solitaire (mobile-optimized)
 - `onet_emoji.html` - Onet/Connect-style matching game with timer
+- `emoji_worm.html` - Emoji Worm Zone arcade game with bot AI, boost, and power-ups
 
 All games load Tailwind via CDN (`https://cdn.tailwindcss.com`) and use Google Fonts. They are designed to run directly in a browser; no server or compilation is required.
 
@@ -21,7 +22,7 @@ For mobile/touch behavior, use `localhost` or a local IP (some features depend o
 
 ## Project theme (mandatory for new games)
 
-Every game in this collection follows one theme: **a simple, self-contained HTML game where emojis are the characters/game pieces.** Any new game added to this repo must follow the same theme — single HTML file, vanilla JS + Tailwind CDN, emoji-based visuals (no image/asset files), playable directly in a browser, mobile-friendly. Register new games as a card in `index.html` (landing page) alongside the existing three.
+Every game in this collection follows one theme: **a simple, self-contained HTML game where emojis are the characters/game pieces.** Any new game added to this repo must follow the same theme — single HTML file, vanilla JS + Tailwind CDN, emoji-based visuals (no image/asset files), playable directly in a browser, mobile-friendly. Register new games as a card in `index.html` (landing page) alongside the existing four.
 
 ## Editing guidance
 
