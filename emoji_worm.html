@@ -265,11 +265,12 @@
     }
 
     function dropFood(x, y, angle) {
-      spawnFood(
-        clamp(x - Math.cos(angle) * 45 + (Math.random() - 0.5) * 16, 40, W - 40),
-        clamp(y - Math.sin(angle) * 45 + (Math.random() - 0.5) * 16, 40, W - 40),
-        0.5
-      );
+      const px = x - Math.cos(angle) * 45 + (Math.random() - 0.5) * 16;
+      const py = y - Math.sin(angle) * 45 + (Math.random() - 0.5) * 16;
+      const cx = clamp(px, 40, W - 40);
+      const cy = clamp(py, 40, W - 40);
+      if ((cx - x) * (cx - x) + (cy - y) * (cy - y) < 34 * 34) spawnFood(px, py, 0.5);
+      else spawnFood(cx, cy, 0.5);
     }
 
     function eatFood(w) {
@@ -369,6 +370,10 @@
       keys = {};
       boostKey = false;
       boostPtr = null;
+      joy.active = false;
+      joy.id = null;
+      joy.angle = null;
+      document.getElementById("joystick").style.display = "none";
     });
 
     const joyEl = document.getElementById("joystick");
@@ -441,6 +446,7 @@
       boardClock = 0;
       powerTimer = 8 + Math.random() * 7;
       boostKey = false;
+      keys = {};
       boostPtr = null;
       joy.active = false;
       joy.id = null;
