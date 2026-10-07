@@ -19,6 +19,10 @@ These are static files. To test, open them in a browser. Options:
 
 For mobile/touch behavior, use `localhost` or a local IP (some features depend on proper viewport and touch events). Games disable default touch behaviors (e.g., `touch-action: none`) for custom gestures.
 
+## Project theme (mandatory for new games)
+
+Every game in this collection follows one theme: **a simple, self-contained HTML game where emojis are the characters/game pieces.** Any new game added to this repo must follow the same theme — single HTML file, vanilla JS + Tailwind CDN, emoji-based visuals (no image/asset files), playable directly in a browser, mobile-friendly. Register new games as a card in `index.html` (landing page) alongside the existing three.
+
 ## Editing guidance
 
 - Keep changes self-contained in the HTML file you're editing (inline CSS + JS). No external JS/CSS modules are used.
@@ -32,7 +36,7 @@ There are no automated tests, linters, or CI. Verification is manual: open the a
 
 ## Notes
 
-- Not a git repo.
-- No environment variables, secrets, or external services required.
+- Git repo with remote `github.com/ametsuramet/Amet-Simple-Games`, deployed via GitHub Pages.
+- No environment variables or secrets required. The landing page (`index.html`) loads a third-party visitor counter script from `cdn.busuanzi.cc`.
 - Assets are all emojis/inline CSS (no image/asset files).
 - Avoid adding comments unless explicitly requested (repo follows the global instruction to not add comments).
