@@ -64,7 +64,7 @@ Game keempat koleksi: "Worm Zones"-like arcade di mana pemain mengendalikan worm
 ## UI (overlay HTML/Tailwind di atas 1 canvas)
 
 - **Menu:** judul, grid pilih emoji (default 🍓), tombol **Main**, aturan main 3 baris.
-- **HUD:** top-left: skor, panjang (segmen), kill; top-right: ikon power-up aktif + sisa waktu; bottom-right: minimap 140×140 (dot pemain = hijau, bot = abu, border arena); atas minimap: mini leaderboard 5 besar (termasuk pemain) berdasarkan panjang.
+- **HUD:** top-left: skor, panjang (segmen), kill; top-right: ikon power-up aktif + sisa waktu; bottom-left: minimap 140×140 (dot pemain = putih, bot = warna emoji masing-masing, makanan = titik kuning); sisi kanan di atas tombol boost: mini leaderboard 5 besar (termasuk pemain) berdasarkan panjang.
 - **Game Over:** "Kalah!", penyebab kematian (badan worm X / border / head-on), statistik: skor akhir, panjang, kill, waktu bertahan; tombol **Main Lagi** + **Menu**.
 - Semua state (`menu` | `playing` | `gameover`) dikelola sebagai overlay div; canvas hanya menggambar arena.
 
