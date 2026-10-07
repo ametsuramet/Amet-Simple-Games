@@ -376,7 +376,8 @@
     const formatCounter = (el) => {
       const raw = el.textContent.trim();
       if (!/^\d+$/.test(raw)) return;
-      el.textContent = Number(raw).toLocaleString("id-ID");
+      const next = Number(raw).toLocaleString("id-ID");
+      if (next !== raw) el.textContent = next;
     };
 
     const hideCounter = () => {
