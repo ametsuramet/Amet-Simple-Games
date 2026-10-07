@@ -254,11 +254,11 @@
       }
     }
 
-    function spawnFood(x, y, val) {
+    function spawnFood(x = null, y = null, val = 1) {
       foods.push({
-        x: x !== null ? x : 60 + Math.random() * (W - 120),
-        y: y !== null ? y : 60 + Math.random() * (W - 120),
-        val: val || 1,
+        x: x ?? 60 + Math.random() * (W - 120),
+        y: y ?? 60 + Math.random() * (W - 120),
+        val: val ?? 1,
         emoji: FOOD_EMOJIS[Math.floor(Math.random() * FOOD_EMOJIS.length)]
       });
     }
@@ -311,14 +311,29 @@
       while (da < -Math.PI) da += Math.PI * 2;
       const slow = Math.max(0.7, 1 - w.segs / 3000);
       w.angle += clamp(da, -TURN_RATE * slow * dt, TURN_RATE * slow * dt);
-      const sp = BASE_SPEED * slow;
+      const canBoost = w.boost && w.segs > 10;
+      const sp = BASE_SPEED * slow * (canBoost ? 2.1 : 1);
       w.vx = Math.cos(w.angle) * sp;
       w.vy = Math.sin(w.angle) * sp;
       w.x += w.vx * dt;
       w.y += w.vy * dt;
       w.distAcc += sp * dt;
-      if (w.distAcc >= SEG_GAP) {
-        w.distAcc = 0;
+      if (canBoost) {
+        w.boostAcc += dt;
+        while (w.boostAcc >= 0.3) {
+          w.boostAcc -= 0.3;
+          w.segs -= 1;
+          dropFood(w.x, w.y);
+          if (w.segs <= 10) {
+            w.segs = 10;
+            break;
+          }
+        }
+      } else {
+        w.boostAcc = 0;
+      }
+      while (w.distAcc >= SEG_GAP) {
+        w.distAcc -= SEG_GAP;
         w.trail.unshift({ x: w.x, y: w.y });
         const cap = Math.min(MAX_SEGS, Math.ceil(w.segs));
         while (w.trail.length > cap) w.trail.pop();
@@ -340,9 +355,73 @@
     window.addEventListener("keydown", (e) => {
       keys[e.code] = true;
       if (e.code.startsWith("Arrow")) e.preventDefault();
+      if (e.code === "Space") {
+        e.preventDefault();
+        boostHeld = true;
+      }
     });
     window.addEventListener("keyup", (e) => {
       keys[e.code] = false;
+      if (e.code === "Space") boostHeld = false;
+    });
+    window.addEventListener("blur", () => {
+      keys = {};
+      boostHeld = false;
+    });
+
+    const joyEl = document.getElementById("joystick");
+    const stickEl = document.getElementById("stick");
+    const boostBtnEl = document.getElementById("boostBtn");
+
+    window.addEventListener("pointerdown", (e) => {
+      if (state !== "playing") return;
+      if (e.pointerType === "mouse") return;
+      if (e.target === boostBtnEl) return;
+      if (e.clientX > vw * 0.6) return;
+      joy.active = true;
+      joy.id = e.pointerId;
+      joy.ox = e.clientX;
+      joy.oy = e.clientY;
+      joy.angle = null;
+      joyEl.style.left = e.clientX - 60 + "px";
+      joyEl.style.top = e.clientY - 60 + "px";
+      joyEl.style.display = "block";
+      stickEl.style.left = "35px";
+      stickEl.style.top = "35px";
+    });
+
+    window.addEventListener("pointermove", (e) => {
+      if (!joy.active || e.pointerId !== joy.id) return;
+      const dx = e.clientX - joy.ox;
+      const dy = e.clientY - joy.oy;
+      const d = Math.hypot(dx, dy);
+      if (d > 8) joy.angle = Math.atan2(dy, dx);
+      const cl = Math.min(d, 40);
+      const nx = d ? (dx / d) * cl : 0;
+      const ny = d ? (dy / d) * cl : 0;
+      stickEl.style.left = 35 + nx + "px";
+      stickEl.style.top = 35 + ny + "px";
+    });
+
+    function endJoy(e) {
+      if (!joy.active || e.pointerId !== joy.id) return;
+      joy.active = false;
+      joy.id = null;
+      joy.angle = null;
+      joyEl.style.display = "none";
+    }
+    window.addEventListener("pointerup", endJoy);
+    window.addEventListener("pointercancel", endJoy);
+
+    boostBtnEl.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      boostHeld = true;
+    });
+    window.addEventListener("pointerup", () => {
+      boostHeld = false;
+    });
+    window.addEventListener("pointercancel", () => {
+      boostHeld = false;
     });
 
     function startGame() {
