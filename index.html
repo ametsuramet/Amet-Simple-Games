@@ -17,6 +17,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Fredoka+One&display=swap"
     rel="stylesheet" />
+  <script defer src="https://cdn.busuanzi.cc/busuanzi/3.6.9/busuanzi.min.js"></script>
    <base href="https://ametsuramet.github.io/Amet-Simple-Games" />
   <style>
     :root {
@@ -344,9 +345,16 @@
   <!-- Footer -->
   <footer class="relative z-10 px-4 pb-6 pt-4 sm:pb-8">
     <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
-      <p class="text-xs text-slate-500 sm:text-sm">
-        Dibuat untuk koleksi game pribadi • HTML5 • Statis • Tanpa build
-      </p>
+      <div class="flex flex-col items-center gap-2 sm:items-start">
+        <span id="visitor-counter"
+          class="inline-flex items-center gap-1.5 rounded-full bg-slate-50/10 px-2.5 py-1 text-xs font-semibold text-slate-200 ring-1 ring-inset ring-white/15">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          👤 <span id="busuanzi_site_uv">…</span> pengunjung • <span id="busuanzi_site_pv">…</span> kunjungan
+        </span>
+        <p class="text-xs text-slate-500 sm:text-sm">
+          Dibuat untuk koleksi game pribadi • HTML5 • Statis • Tanpa build
+        </p>
+      </div>
       <p class="text-xs text-slate-600 sm:text-sm">
         © <span id="year"></span> Simple Games Collection by AMET SURAMET
       </p>
@@ -355,6 +363,39 @@
 
   <script>
     document.getElementById("year").textContent = new Date().getFullYear();
+
+    const counterPill = document.getElementById("visitor-counter");
+    const counterNums = [
+      document.getElementById("busuanzi_site_uv"),
+      document.getElementById("busuanzi_site_pv"),
+    ];
+
+    const isCounterValue = (el) => /^(\d+|\d{1,3}(\.\d{3})+)$/.test(el.textContent.trim());
+    const isPlaceholder = (el) => el.textContent.trim() === "…";
+
+    const formatCounter = (el) => {
+      const raw = el.textContent.trim();
+      if (!/^\d+$/.test(raw)) return;
+      el.textContent = Number(raw).toLocaleString("id-ID");
+    };
+
+    const hideCounter = () => {
+      counterPill.style.display = "none";
+    };
+
+    setTimeout(() => {
+      if (!counterNums.every(isCounterValue)) hideCounter();
+    }, 6000);
+
+    const observer = new MutationObserver(() => {
+      counterNums.forEach(formatCounter);
+      if (counterNums.every(isCounterValue)) counterPill.style.display = "";
+      else if (counterNums.some((el) => !isPlaceholder(el) && !isCounterValue(el))) hideCounter();
+    });
+
+    counterNums.forEach((el) =>
+      observer.observe(el, { childList: true, characterData: true, subtree: true })
+    );
   </script>
 </body>
 </html>
