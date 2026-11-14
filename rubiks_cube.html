@@ -65,21 +65,37 @@
 
     <!-- 3D Canvas Container -->
     <div id="scene-container"></div>
+    <canvas id="fireworks-canvas" class="fixed inset-0 pointer-events-none z-40 hidden"></canvas>
 
     <!-- UI Overlay -->
     <div id="ui-layer">
-        <div class="flex justify-between items-start">
-            <div class="glass-panel p-5 rounded-3xl pointer-events-auto shadow-2xl">
-                <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 ml-1">Rubik's Cube</h1>
-                <p class="text-sm text-gray-300 mt-2 max-w-xs ml-1">
+        <div class="flex flex-col sm:flex-row justify-between items-start gap-3">
+            <div class="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-3xl pointer-events-auto shadow-2xl max-w-xs">
+                <h1 class="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 ml-1">Rubik's Cube</h1>
+                <p class="text-xs sm:text-sm text-gray-300 mt-1 sm:mt-2 ml-1 hidden xs:block">
                     • <b>Drag background</b> to orbit camera.<br>
                     • <b>Drag a cube face</b> to rotate that layer.
                 </p>
             </div>
-            <a href="index.html" class="glass-panel px-4 py-3 rounded-2xl pointer-events-auto shadow-2xl flex items-center gap-2 hover:bg-gray-800 transition-colors active:scale-95 text-gray-200">
-                <span class="text-lg">🏠</span>
-                <span class="text-sm font-semibold hidden sm:inline">Home</span>
-            </a>
+
+            <div class="flex items-center gap-2 pointer-events-auto self-end sm:self-start">
+                <div id="stats-panel" class="glass-panel px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs sm:text-sm font-bold">
+                    <div class="flex items-center gap-1 text-sky-300">
+                        <span>⏱️</span>
+                        <span id="timer-display">00:00</span>
+                    </div>
+                    <div class="w-px h-3.5 bg-white/20"></div>
+                    <div class="flex items-center gap-1 text-emerald-300">
+                        <span>🔄</span>
+                        <span id="moves-display">0 gerakan</span>
+                    </div>
+                </div>
+
+                <a href="index.html" class="glass-panel px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl shadow-2xl flex items-center gap-1.5 hover:bg-gray-800 transition-colors active:scale-95 text-gray-200">
+                    <span class="text-base sm:text-lg">🏠</span>
+                    <span class="text-xs sm:text-sm font-semibold hidden sm:inline">Home</span>
+                </a>
+            </div>
         </div>
 
         <div class="flex justify-center gap-4 mb-4 md:mb-8 pointer-events-auto">
@@ -91,6 +107,52 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 256 256"><path d="M224,128a96,96,0,1,1-96-96,8,8,0,0,1,0,16,80,80,0,1,0,80,80,8,8,0,0,1,16,0Zm-96-24a8,8,0,0,0-8,8v40a8,8,0,0,0,16,0V112A8,8,0,0,0,128,104Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,128,168Z"></path></svg>
                 Reset
             </button>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md opacity-0 pointer-events-none transition-opacity duration-200">
+        <div class="glass-panel max-w-sm w-full p-6 rounded-3xl shadow-2xl border border-white/10 text-center transform scale-95 transition-transform duration-200" id="confirm-modal-box">
+            <div id="confirm-icon" class="text-4xl mb-3">❓</div>
+            <h3 id="confirm-title" class="text-xl font-bold text-white mb-2">Konfirmasi</h3>
+            <p id="confirm-message" class="text-sm text-gray-300 mb-6">Apakah Anda yakin?</p>
+            <div class="flex justify-center gap-3">
+                <button id="btn-confirm-cancel" class="px-5 py-2.5 rounded-full font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors text-sm active:scale-95">
+                    Batal
+                </button>
+                <button id="btn-confirm-ok" class="px-5 py-2.5 rounded-full font-semibold transition-colors text-sm text-white shadow-lg active:scale-95">
+                    Ya
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Win Modal -->
+    <div id="win-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="glass-panel max-w-md w-full p-6 sm:p-8 rounded-3xl shadow-2xl border border-emerald-500/30 text-center transform scale-90 transition-transform duration-300 relative overflow-hidden" id="win-modal-box">
+            <div class="text-6xl mb-3 animate-bounce">🏆</div>
+            <h2 class="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400 mb-2">Selamat!</h2>
+            <p class="text-sm text-gray-300 mb-6">Kamu berhasil menyelesaikan dan menyusun kembali Rubik's Cube!</p>
+            
+            <div class="grid grid-cols-2 gap-3 mb-6 bg-slate-900/60 p-4 rounded-2xl border border-white/5">
+                <div class="flex flex-col items-center">
+                    <span class="text-xs text-gray-400 uppercase font-semibold">Waktu</span>
+                    <span id="win-time" class="text-xl font-extrabold text-sky-400 mt-1">00:00</span>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-xs text-gray-400 uppercase font-semibold">Gerakan</span>
+                    <span id="win-moves" class="text-xl font-extrabold text-emerald-400 mt-1">0 gerakan</span>
+                </div>
+            </div>
+
+            <div class="flex justify-center gap-3">
+                <button id="btn-win-shuffle" class="px-6 py-2.5 rounded-full font-bold text-white shadow-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-sm flex items-center gap-1.5 transition-colors">
+                    🔀 Main Lagi
+                </button>
+                <button id="btn-win-close" class="px-5 py-2.5 rounded-full font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors text-sm active:scale-95">
+                    Tutup
+                </button>
+            </div>
         </div>
     </div>
 
@@ -111,7 +173,7 @@
             0xef4444, // R - Red (Tailwind red-500)
             0xf97316, // L - Orange (Tailwind orange-500)
             0xf8fafc, // U - White (Tailwind slate-50)
-            0xeab308, // D - Yellow (Tailwind yellow-500)
+            0xffea00, // D - Yellow
             0x22c55e, // F - Green (Tailwind green-500)
             0x3b82f6  // B - Blue (Tailwind blue-500)
         ];
@@ -138,6 +200,18 @@
         const activeTouches = new Map();
         let initialPinchDist = null;
         let initialCameraDist = null;
+
+        let isGameActive = false;
+        let isShuffling = false;
+        let moveCount = 0;
+        let timerSeconds = 0;
+        let timerInterval = null;
+        let confirmCallback = null;
+
+        let fireworksActive = false;
+        let fireworksParticles = [];
+        let fireworksCanvas = null;
+        let fireworksCtx = null;
 
         init();
         animate();
@@ -182,8 +256,48 @@
             window.addEventListener('pointerup', onPointerUp);
             window.addEventListener('pointercancel', onPointerUp);
 
-            document.getElementById('btn-shuffle').addEventListener('click', shuffleCube);
-            document.getElementById('btn-reset').addEventListener('click', resetCube);
+            document.getElementById('btn-shuffle').addEventListener('click', () => {
+                if (isAnimating || isShuffling) return;
+                showConfirmModal({
+                    icon: '🔀',
+                    title: 'Acak Kubus?',
+                    message: 'Permainan baru akan dimulai dengan susunan teracak. Waktu dan gerakan akan dihitung.',
+                    okText: 'Acak Sekarang',
+                    okClass: 'bg-blue-600 hover:bg-blue-500',
+                    onConfirm: () => startShuffleGame()
+                });
+            });
+
+            document.getElementById('btn-reset').addEventListener('click', () => {
+                showConfirmModal({
+                    icon: '🔄',
+                    title: 'Reset Kubus?',
+                    message: 'Kembalikan posisi semua warna kubus ke keadaan awal tersusun rapi?',
+                    okText: 'Reset',
+                    okClass: 'bg-red-600 hover:bg-red-500',
+                    onConfirm: () => resetCube()
+                });
+            });
+
+            document.getElementById('btn-confirm-cancel').addEventListener('click', hideConfirmModal);
+            document.getElementById('btn-confirm-ok').addEventListener('click', () => {
+                if (confirmCallback) confirmCallback();
+                hideConfirmModal();
+            });
+            document.getElementById('confirm-modal').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('confirm-modal')) hideConfirmModal();
+            });
+
+            document.getElementById('btn-win-close').addEventListener('click', hideWinModal);
+            document.getElementById('btn-win-shuffle').addEventListener('click', () => {
+                hideWinModal();
+                startShuffleGame();
+            });
+            document.getElementById('win-modal').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('win-modal')) hideWinModal();
+            });
+
+            initFireworks();
         }
 
         function createPuzzle() {
@@ -226,7 +340,7 @@
         // --- Interaction Logic ---
 
         function onPointerDown(e) {
-            if (isAnimating) return;
+            if (isAnimating || isShuffling) return;
 
             activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
             if (activeTouches.size === 2) {
@@ -373,9 +487,16 @@
             });
 
             if (bestAxis) {
-                // Determine which layer (slice) of the axis to rotate based on the clicked cubie's position
                 const layer = Math.round(activeCubie.position[bestAxis]);
-                rotateLayer(bestAxis, layer, direction, 300);
+                if (isGameActive && !isShuffling) {
+                    moveCount++;
+                    updateMovesDisplay();
+                }
+                rotateLayer(bestAxis, layer, direction, 300, () => {
+                    if (isGameActive && !isShuffling && isCubeSolved()) {
+                        onGameWon();
+                    }
+                });
             }
         }
 
@@ -448,7 +569,17 @@
             requestAnimationFrame(animateRotation);
         }
 
-        // --- Game Controls (Shuffle & Reset) ---
+        function startShuffleGame() {
+            if (isAnimating || isShuffling) return;
+            stopTimer();
+            isGameActive = false;
+            isShuffling = true;
+            moveCount = 0;
+            timerSeconds = 0;
+            updateMovesDisplay();
+            updateTimerDisplay();
+            shuffleCube();
+        }
 
         function shuffleCube() {
             if (isAnimating) return;
@@ -456,7 +587,6 @@
             const layers = [-1, 0, 1];
             const dirs = [1, -1];
             
-            // Queue 20 random moves
             for (let i = 0; i < 20; i++) {
                 shuffleQueue.push({
                     axis: axes[Math.floor(Math.random() * 3)],
@@ -468,19 +598,30 @@
         }
 
         function processQueue() {
-            if (shuffleQueue.length === 0) return;
+            if (shuffleQueue.length === 0) {
+                if (isShuffling) {
+                    isShuffling = false;
+                    isGameActive = true;
+                    moveCount = 0;
+                    updateMovesDisplay();
+                    startTimer();
+                }
+                return;
+            }
             const move = shuffleQueue.shift();
-            // Faster duration (120ms) for shuffles
             rotateLayer(move.axis, move.layer, move.dir, 120); 
         }
 
         function resetCube() {
-            if (isAnimating && shuffleQueue.length > 0) {
-                // Clear pending shuffles if interrupting
-                shuffleQueue = [];
-                return;
-            }
-            if (isAnimating) return;
+            stopTimer();
+            isGameActive = false;
+            isShuffling = false;
+            shuffleQueue = [];
+            isAnimating = false;
+            moveCount = 0;
+            timerSeconds = 0;
+            updateMovesDisplay();
+            updateTimerDisplay();
             createPuzzle();
             camera.position.set(4.5, 4.5, 6);
             camera.up.set(0, 1, 0);
@@ -491,12 +632,247 @@
             activeCubie = null;
         }
 
-        // --- Render Loop ---
+        function startTimer() {
+            stopTimer();
+            timerSeconds = 0;
+            updateTimerDisplay();
+            timerInterval = setInterval(() => {
+                timerSeconds++;
+                updateTimerDisplay();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(timerSeconds / 60);
+            const secs = timerSeconds % 60;
+            const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            const el = document.getElementById('timer-display');
+            if (el) el.textContent = formatted;
+            return formatted;
+        }
+
+        function updateMovesDisplay() {
+            const el = document.getElementById('moves-display');
+            if (el) el.textContent = `${moveCount} gerakan`;
+        }
+
+        function showConfirmModal({ icon, title, message, okText, okClass, onConfirm }) {
+            const modal = document.getElementById('confirm-modal');
+            const box = document.getElementById('confirm-modal-box');
+            document.getElementById('confirm-icon').textContent = icon || '❓';
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-message').textContent = message;
+
+            const okBtn = document.getElementById('btn-confirm-ok');
+            okBtn.textContent = okText || 'Ya';
+            okBtn.className = `px-5 py-2.5 rounded-full font-semibold transition-colors text-sm text-white shadow-lg active:scale-95 ${okClass || 'bg-blue-600 hover:bg-blue-500'}`;
+
+            confirmCallback = onConfirm;
+
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            box.classList.remove('scale-95');
+            box.classList.add('scale-100');
+        }
+
+        function hideConfirmModal() {
+            const modal = document.getElementById('confirm-modal');
+            const box = document.getElementById('confirm-modal-box');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            box.classList.add('scale-95');
+            box.classList.remove('scale-100');
+            confirmCallback = null;
+        }
+
+        function showWinModal() {
+            const modal = document.getElementById('win-modal');
+            const box = document.getElementById('win-modal-box');
+            document.getElementById('win-time').textContent = updateTimerDisplay();
+            document.getElementById('win-moves').textContent = `${moveCount} gerakan`;
+
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            box.classList.remove('scale-90');
+            box.classList.add('scale-100');
+
+            startFireworks();
+        }
+
+        function hideWinModal() {
+            const modal = document.getElementById('win-modal');
+            const box = document.getElementById('win-modal-box');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            box.classList.add('scale-90');
+            box.classList.remove('scale-100');
+            stopFireworks();
+        }
+
+        function onGameWon() {
+            stopTimer();
+            isGameActive = false;
+            showWinModal();
+        }
+
+        function isCubeSolved() {
+            const localNormals = [
+                new THREE.Vector3(1, 0, 0),
+                new THREE.Vector3(-1, 0, 0),
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(0, -1, 0),
+                new THREE.Vector3(0, 0, 1),
+                new THREE.Vector3(0, 0, -1)
+            ];
+
+            const worldFaces = [
+                { axis: 'x', val: 1, normal: new THREE.Vector3(1, 0, 0) },
+                { axis: 'x', val: -1, normal: new THREE.Vector3(-1, 0, 0) },
+                { axis: 'y', val: 1, normal: new THREE.Vector3(0, 1, 0) },
+                { axis: 'y', val: -1, normal: new THREE.Vector3(0, -1, 0) },
+                { axis: 'z', val: 1, normal: new THREE.Vector3(0, 0, 1) },
+                { axis: 'z', val: -1, normal: new THREE.Vector3(0, 0, -1) }
+            ];
+
+            for (const face of worldFaces) {
+                let faceColor = null;
+                let count = 0;
+                for (const c of cubies) {
+                    if (Math.round(c.position[face.axis]) === face.val) {
+                        count++;
+                        let matchedColor = null;
+                        for (let i = 0; i < 6; i++) {
+                            const worldNorm = localNormals[i].clone().applyQuaternion(c.quaternion).round();
+                            if (worldNorm.distanceToSquared(face.normal) < 0.1) {
+                                matchedColor = c.material[i].color.getHex();
+                                break;
+                            }
+                        }
+                        if (matchedColor === null || matchedColor === innerColor) return false;
+                        if (faceColor === null) {
+                            faceColor = matchedColor;
+                        } else if (faceColor !== matchedColor) {
+                            return false;
+                        }
+                    }
+                }
+                if (count !== 9) return false;
+            }
+            return true;
+        }
+
+        function initFireworks() {
+            fireworksCanvas = document.getElementById('fireworks-canvas');
+            if (!fireworksCanvas) return;
+            fireworksCtx = fireworksCanvas.getContext('2d');
+            resizeFireworks();
+        }
+
+        function resizeFireworks() {
+            if (!fireworksCanvas) return;
+            fireworksCanvas.width = window.innerWidth;
+            fireworksCanvas.height = window.innerHeight;
+        }
+
+        function startFireworks() {
+            if (!fireworksCanvas) initFireworks();
+            if (!fireworksCanvas) return;
+            fireworksCanvas.classList.remove('hidden');
+            fireworksActive = true;
+            fireworksParticles = [];
+
+            let bursts = 0;
+            const maxBursts = 14;
+
+            function launch() {
+                if (!fireworksActive || bursts >= maxBursts) return;
+                const x = window.innerWidth * (0.15 + Math.random() * 0.7);
+                const y = window.innerHeight * (0.15 + Math.random() * 0.45);
+                createExplosion(x, y);
+                bursts++;
+                if (bursts < maxBursts) {
+                    setTimeout(launch, 250 + Math.random() * 300);
+                }
+            }
+
+            launch();
+            launch();
+            requestAnimationFrame(updateFireworks);
+        }
+
+        function stopFireworks() {
+            fireworksActive = false;
+            fireworksParticles = [];
+            if (fireworksCanvas) {
+                fireworksCanvas.classList.add('hidden');
+                if (fireworksCtx) fireworksCtx.clearRect(0, 0, fireworksCanvas.width, fireworksCanvas.height);
+            }
+        }
+
+        function createExplosion(x, y) {
+            const palette = ['#ef4444', '#f97316', '#ffea00', '#22c55e', '#3b82f6', '#ec4899', '#38bdf8', '#a855f7', '#ffffff'];
+            const count = 45 + Math.floor(Math.random() * 30);
+            const color = palette[Math.floor(Math.random() * palette.length)];
+
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 6;
+                fireworksParticles.push({
+                    x,
+                    y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    color: Math.random() > 0.25 ? color : '#ffffff',
+                    size: 2.5 + Math.random() * 2.5,
+                    alpha: 1,
+                    decay: 0.012 + Math.random() * 0.014,
+                    gravity: 0.08
+                });
+            }
+        }
+
+        function updateFireworks() {
+            if (!fireworksActive && fireworksParticles.length === 0) return;
+
+            fireworksCtx.clearRect(0, 0, fireworksCanvas.width, fireworksCanvas.height);
+
+            for (let i = fireworksParticles.length - 1; i >= 0; i--) {
+                const p = fireworksParticles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += p.gravity;
+                p.vx *= 0.98;
+                p.alpha -= p.decay;
+
+                if (p.alpha <= 0) {
+                    fireworksParticles.splice(i, 1);
+                    continue;
+                }
+
+                fireworksCtx.save();
+                fireworksCtx.globalAlpha = p.alpha;
+                fireworksCtx.fillStyle = p.color;
+                fireworksCtx.beginPath();
+                fireworksCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                fireworksCtx.fill();
+                fireworksCtx.restore();
+            }
+
+            if (fireworksActive || fireworksParticles.length > 0) {
+                requestAnimationFrame(updateFireworks);
+            } else {
+                stopFireworks();
+            }
+        }
 
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            resizeFireworks();
         }
 
         function animate() {
