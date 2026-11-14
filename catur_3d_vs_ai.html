@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Catur 3D Interaktif vs AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chess.js untuk validasi aturan catur lengkap -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+        }
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+        }
+        #canvas-container canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+            outline: none;
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+        }
+        /* Custom scrollbar untuk riwayat langkah */
+        .custom-scroll::-webkit-scrollbar {
+            width: 5px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 999px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 999px;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .thinking-dot {
+            animation: pulse-glow 1.2s infinite ease-in-out;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body class="text-slate-100">
+
+    <!-- Container 3D -->
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay -->
+    <div class="fixed inset-0 z-10 pointer-events-none flex flex-col justify-between p-3 sm:p-5">
+        
+        <!-- Baris Atas: Status & Info Pemain -->
+        <div class="flex flex-col md:flex-row justify-between items-start gap-3">
+            
+            <!-- Panel Status Utama -->
+            <div class="glass-card rounded-3xl p-4 sm:p-5 pointer-events-auto w-full md:w-auto min-w-[280px]">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h1 class="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500">
+                            Grandmaster 3D
+                        </h1>
+                        <p class="text-xs text-slate-400 mt-0.5">Klik bidak untuk jalan • Seret latar untuk memutar</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div id="turn-badge" class="px-3.5 py-1.5 rounded-2xl text-xs font-semibold bg-slate-100 text-slate-900 shadow-sm flex items-center gap-2 transition-all">
+                            <span id="turn-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                            <span id="turn-text">Giliran Anda (Putih)</span>
+                        </div>
+                        <a href="index.html" class="glass-card hover:bg-slate-800/90 active:scale-95 transition-all px-3 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 text-slate-200 shadow-sm" title="Kembali ke Beranda">
+                            <span>🏠</span>
+                            <span class="hidden sm:inline">Home</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Alert Status (Skak / Skakmat / Remis) -->
+                <div id="status-banner" class="hidden mt-3 px-3.5 py-2 rounded-2xl text-xs font-semibold text-center transition-all"></div>
+
+                <!-- Bidak yang Termakan -->
+                <div class="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 gap-2 text-xs">
+                    <div class="bg-white/5 rounded-2xl p-2">
+                        <div class="text-slate-400 text-[11px] mb-1">Dimakan Putih:</div>
+                        <div id="captured-by-white" class="min-h-[20px] text-base leading-none tracking-tight text-slate-200 flex flex-wrap gap-0.5">-</div>
+                    </div>
+                    <div class="bg-white/5 rounded-2xl p-2">
+                        <div class="text-slate-400 text-[11px] mb-1">Dimakan AI:</div>
+                        <div id="captured-by-black" class="min-h-[20px] text-base leading-none tracking-tight text-amber-300 flex flex-wrap gap-0.5">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Riwayat Langkah (Desktop & Tablet) -->
+            <div class="glass-card rounded-3xl p-4 pointer-events-auto hidden sm:flex flex-col w-64 max-h-56">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Riwayat Langkah</span>
+                    <span id="move-count" class="text-xs bg-white/10 px-2 py-0.5 rounded-full text-slate-300">0</span>
+                </div>
+                <div id="move-history" class="custom-scroll overflow-y-auto flex-1 text-xs space-y-1 pr-1 text-slate-300">
+                    <div class="text-slate-500 italic text-center py-4">Belum ada langkah</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Baris Bawah: Kontrol Game -->
+        <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pointer-events-auto mb-1 sm:mb-2">
+            <!-- Tingkat Kesulitan -->
+            <div class="glass-card rounded-2xl px-3 py-2 flex items-center gap-2">
+                <label for="difficulty" class="text-xs font-medium text-slate-300 pl-1">Level AI:</label>
+                <select id="difficulty" class="bg-slate-800/90 text-slate-100 text-xs font-semibold rounded-xl px-3 py-1.5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400/50 cursor-pointer">
+                    <option value="1">Mudah (Pemula)</option>
+                    <option value="2" selected>Sedang (Klub)</option>
+                    <option value="3">Sulit (Master)</option>
+                </select>
+            </div>
+
+            <!-- Tombol Undo -->
+            <button id="btn-undo" class="glass-card hover:bg-slate-800/90 active:scale-95 transition-all px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold flex items-center gap-2 text-slate-200 disabled:opacity-40 disabled:pointer-events-none">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+                Undo
+            </button>
+
+            <!-- Tombol Flip Kamera -->
+            <button id="btn-flip" class="glass-card hover:bg-slate-800/90 active:scale-95 transition-all px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold flex items-center gap-2 text-slate-200">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Putar Sudut
+            </button>
+
+            <!-- Tombol Game Baru -->
+            <button id="btn-reset" class="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-lg shadow-amber-500/20 active:scale-95 transition-all px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4"/></svg>
+                Game Baru
+            </button>
+
+            <a href="index.html" class="glass-card hover:bg-slate-800/90 active:scale-95 transition-all px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold flex items-center gap-2 text-slate-200">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                Home
+            </a>
+        </div>
+    </div>
+
+    <!-- Modal Promosi Pion -->
+    <div id="promotion-modal" class="fixed inset-0 z-30 hidden items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4">
+        <div class="glass-card rounded-3xl p-6 max-w-sm w-full text-center border border-amber-400/30">
+            <h2 class="text-lg font-bold text-amber-300 mb-1">Promosi Pion!</h2>
+            <p class="text-xs text-slate-300 mb-5">Pilih bidak pengganti untuk pion Anda:</p>
+            <div class="grid grid-cols-4 gap-3">
+                <button data-piece="q" class="promo-btn bg-white/10 hover:bg-amber-500/30 border border-white/15 rounded-2xl p-3 flex flex-col items-center gap-1 transition-all active:scale-95">
+                    <span class="text-3xl">♕</span>
+                    <span class="text-[11px] font-medium">Menteri</span>
+                </button>
+                <button data-piece="r" class="promo-btn bg-white/10 hover:bg-amber-500/30 border border-white/15 rounded-2xl p-3 flex flex-col items-center gap-1 transition-all active:scale-95">
+                    <span class="text-3xl">♖</span>
+                    <span class="text-[11px] font-medium">Benteng</span>
+                </button>
+                <button data-piece="b" class="promo-btn bg-white/10 hover:bg-amber-500/30 border border-white/15 rounded-2xl p-3 flex flex-col items-center gap-1 transition-all active:scale-95">
+                    <span class="text-3xl">♗</span>
+                    <span class="text-[11px] font-medium">Gajah</span>
+                </button>
+                <button data-piece="n" class="promo-btn bg-white/10 hover:bg-amber-500/30 border border-white/15 rounded-2xl p-3 flex flex-col items-center gap-1 transition-all active:scale-95">
+                    <span class="text-3xl">♘</span>
+                    <span class="text-[11px] font-medium">Kuda</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Game Over -->
+    <div id="gameover-modal" class="fixed inset-0 z-30 hidden items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4">
+        <div class="glass-card rounded-3xl p-7 max-w-sm w-full text-center border border-white/20">
+            <div id="gameover-icon" class="text-5xl mb-3">🏆</div>
+            <h2 id="gameover-title" class="text-2xl font-bold text-white mb-1">Skakmat!</h2>
+            <p id="gameover-desc" class="text-sm text-slate-300 mb-6">Selamat, Anda memenangkan pertandingan!</p>
+            <div class="flex flex-col gap-2.5">
+                <button id="btn-play-again" class="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-bold py-3 px-6 rounded-2xl shadow-lg transition-all active:scale-95">
+                    Main Lagi
+                </button>
+                <a href="index.html" class="w-full glass-card hover:bg-slate-800 text-slate-200 font-semibold py-2.5 px-6 rounded-2xl transition-all active:scale-95 inline-flex items-center justify-center gap-2 text-sm">
+                    <span>🏠</span> Kembali ke Beranda
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+        // ==========================================
+        // 1. INISIALISASI ENGINE CATUR & AI (MINIMAX)
+        // ==========================================
+        const chess = new Chess();
+        let isPlayerTurn = true;
+        let isAnimating = false;
+        let pendingPromotionMove = null;
+        let cameraFlipped = false;
+
+        // Bobot nilai bidak
+        const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+
+        // Piece-Square Tables (dari sudut pandang Putih, dibalik untuk Hitam)
+        const PST = {
+            p: [
+                [0,  0,  0,  0,  0,  0,  0,  0],
+                [50, 50, 50, 50, 50, 50, 50, 50],
+                [10, 10, 20, 30, 30, 20, 10, 10],
+                [5,  5, 10, 25, 25, 10,  5,  5],
+                [0,  0,  0, 20, 20,  0,  0,  0],
+                [5, -5,-10,  0,  0,-10, -5,  5],
+                [5, 10, 10,-20,-20, 10, 10,  5],
+                [0,  0,  0,  0,  0,  0,  0,  0]
+            ],
+            n: [
+                [-50,-40,-30,-30,-30,-30,-40,-50],
+                [-40,-20,  0,  0,  0,  0,-20,-40],
+                [-30,  0, 10, 15, 15, 10,  0,-30],
+                [-30,  5, 15, 20, 20, 15,  5,-30],
+                [-30,  0, 15, 20, 20, 15,  0,-30],
+                [-30,  5, 10, 15, 15, 10,  5,-30],
+                [-40,-20,  0,  5,  5,  0,-20,-40],
+                [-50,-40,-30,-30,-30,-30,-40,-50]
+            ],
+            b: [
+                [-20,-10,-10,-10,-10,-10,-10,-20],
+                [-10,  0,  0,  0,  0,  0,  0,-10],
+                [-10,  0,  5, 10, 10,  5,  0,-10],
+                [-10,  5,  5, 10, 10,  5,  5,-10],
+                [-10,  0, 10, 10, 10, 10,  0,-10],
+                [-10, 10, 10, 10, 10, 10, 10,-10],
+                [-10,  5,  0,  0,  0,  0,  5,-10],
+                [-20,-10,-10,-10,-10,-10,-10,-20]
+            ],
+            r: [
+                [0,  0,  0,  0,  0,  0,  0,  0],
+                [5, 10, 10, 10, 10, 10, 10,  5],
+                [-5,  0,  0,  0,  0,  0,  0, -5],
+                [-5,  0,  0,  0,  0,  0,  0, -5],
+                [-5,  0,  0,  0,  0,  0,  0, -5],
+                [-5,  0,  0,  0,  0,  0,  0, -5],
+                [-5,  0,  0,  0,  0,  0,  0, -5],
+                [0,  0,  0,  5,  5,  0,  0,  0]
+            ],
+            q: [
+                [-20,-10,-10, -5, -5,-10,-10,-20],
+                [-10,  0,  0,  0,  0,  0,  0,-10],
+                [-10,  0,  5,  5,  5,  5,  0,-10],
+                [-5,  0,  5,  5,  5,  5,  0, -5],
+                [0,  0,  5,  5,  5,  5,  0, -5],
+                [-10,  5,  5,  5,  5,  5,  0,-10],
+                [-10,  0,  5,  0,  0,  0,  0,-10],
+                [-20,-10,-10, -5, -5,-10,-10,-20]
+            ],
+            k: [
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-30,-40,-40,-50,-50,-40,-40,-30],
+                [-20,-30,-30,-40,-40,-30,-30,-20],
+                [-10,-20,-20,-20,-20,-20,-20,-10],
+                [20, 20,  0,  0,  0,  0, 20, 20],
+                [20, 30, 10,  0,  0, 10, 30, 20]
+            ]
+        };
+
+        function evaluateBoard(game) {
+            const board = game.board();
+            let totalScore = 0;
+
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = board[r][c];
+                    if (piece) {
+                        const baseVal = PIECE_VALUES[piece.type];
+                        const pstVal = piece.color === 'w'
+                            ? PST[piece.type][r][c]
+                            : PST[piece.type][7 - r][c];
+                        
+                        if (piece.color === 'w') {
+                            totalScore += (baseVal + pstVal);
+                        } else {
+                            totalScore -= (baseVal + pstVal);
+                        }
+                    }
+                }
+            }
+            return totalScore;
+        }
+
+        // Minimax dengan Alpha-Beta Pruning (Hitam meminimalkan skor, Putih memaksimalkan skor)
+        function minimax(game, depth, alpha, beta, isMaximizingPlayer) {
+            if (depth === 0 || game.game_over()) {
+                if (game.in_checkmate()) {
+                    return isMaximizingPlayer ? -99999 - depth : 99999 + depth;
+                }
+                if (game.in_draw() || game.in_stalemate() || game.in_threefold_repetition()) {
+                    return 0;
+                }
+                return evaluateBoard(game);
+            }
+
+            const moves = game.moves({ verbose: true });
+            // Move ordering sederhana: prioritaskan tangkapan agar pruning lebih cepat
+            moves.sort((a, b) => (b.captured ? 10 : 0) - (a.captured ? 10 : 0));
+
+            if (isMaximizingPlayer) {
+                let maxEval = -Infinity;
+                for (const move of moves) {
+                    game.move(move);
+                    const ev = minimax(game, depth - 1, alpha, beta, false);
+                    game.undo();
+                    maxEval = Math.max(maxEval, ev);
+                    alpha = Math.max(alpha, ev);
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (const move of moves) {
+                    game.move(move);
+                    const ev = minimax(game, depth - 1, alpha, beta, true);
+                    game.undo();
+                    minEval = Math.min(minEval, ev);
+                    beta = Math.min(beta, ev);
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
+        }
+
+        function getBestAIMove(depth) {
+            const moves = chess.moves({ verbose: true });
+            if (moves.length === 0) return null;
+
+            // Acak sedikit urutan awal agar permainan variatif
+            moves.sort(() => Math.random() - 0.5);
+            moves.sort((a, b) => (b.captured ? 10 : 0) - (a.captured ? 10 : 0));
+
+            let bestMove = moves[0];
+            let bestValue = Infinity; // AI adalah Hitam (minimizing)
+
+            for (const move of moves) {
+                chess.move(move);
+                const boardValue = minimax(chess, depth - 1, -Infinity, Infinity, true);
+                chess.undo();
+
+                if (boardValue < bestValue) {
+                    bestValue = boardValue;
+                    bestMove = move;
+                }
+            }
+            return bestMove;
+        }
+
+        // ==========================================
+        // 2. SETUP THREE.JS SCENE & PENCAHAYAAN
+        // ==========================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+
+        const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 10.5, 10.5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
+        container.appendChild(renderer.domElement);
+
+        // OrbitControls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.06;
+        controls.maxPolarAngle = Math.PI / 2 - 0.08; // Mencegah kamera tembus ke bawah papan
+        controls.minDistance = 6.5;
+        controls.maxDistance = 22;
+        controls.target.set(0, 0, 0);
+
+        // Pencahayaan Hangat & Studio
+        const ambientLight = new THREE.AmbientLight(0xfff8eb, 0.65);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xfff5e4, 1.3);
+        mainLight.position.set(7, 14, 8);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 2;
+        mainLight.shadow.camera.far = 30;
+        const d = 6.5;
+        mainLight.shadow.camera.left = -d;
+        mainLight.shadow.camera.right = d;
+        mainLight.shadow.camera.top = d;
+        mainLight.shadow.camera.bottom = -d;
+        mainLight.shadow.bias = -0.0005;
+        scene.add(mainLight);
+
+        const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+        rimLight.position.set(-8, 9, -8);
+        scene.add(rimLight);
+
+        // ==========================================
+        // 3. PEMBUATAN PAPAN CATUR 3D & KOORDINAT
+        // ==========================================
+        const SQUARE_SIZE = 1.1;
+        const boardGroup = new THREE.Group();
+        scene.add(boardGroup);
+
+        // Bingkai kayu mahoni gelap dengan sudut membulat (RoundedBoxGeometry)
+        const frameWidth = SQUARE_SIZE * 8 + 0.9;
+        const frameGeo = new RoundedBoxGeometry(frameWidth, 0.45, frameWidth, 5, 0.14);
+        const frameMat = new THREE.MeshStandardMaterial({
+            color: 0x2b1810,
+            roughness: 0.35,
+            metalness: 0.1
+        });
+        const boardFrame = new THREE.Mesh(frameGeo, frameMat);
+        boardFrame.position.y = -0.24;
+        boardFrame.receiveShadow = true;
+        boardGroup.add(boardFrame);
+
+        // List emas tipis di sekeliling area petak
+        const trimWidth = SQUARE_SIZE * 8 + 0.12;
+        const trimGeo = new RoundedBoxGeometry(trimWidth, 0.46, trimWidth, 3, 0.04);
+        const trimMat = new THREE.MeshStandardMaterial({
+            color: 0xd4af37,
+            roughness: 0.25,
+            metalness: 0.8
+        });
+        const boardTrim = new THREE.Mesh(trimGeo, trimMat);
+        boardTrim.position.y = -0.235;
+        boardGroup.add(boardTrim);
+
+        // Petak 8x8
+        const squareMeshes = {}; // map 'e4' -> Mesh
+        const lightSquareMat = new THREE.MeshStandardMaterial({ color: 0xf1e6d2, roughness: 0.3, metalness: 0.05 });
+        const darkSquareMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.35, metalness: 0.1 });
+        const squareGeo = new RoundedBoxGeometry(SQUARE_SIZE * 0.98, 0.12, SQUARE_SIZE * 0.98, 2, 0.02);
+
+        const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+        function algebraicToWorld(sq) {
+            const fileIdx = files.indexOf(sq[0]);
+            const rankIdx = parseInt(sq[1], 10) - 1; // 0 (baris 1/putih) s.d 7 (baris 8/hitam)
+            const x = (fileIdx - 3.5) * SQUARE_SIZE;
+            const z = (3.5 - rankIdx) * SQUARE_SIZE;
+            return new THREE.Vector3(x, 0, z);
+        }
+
+        for (let r = 0; r < 8; r++) {
+            for (let f = 0; f < 8; f++) {
+                const sqName = files[f] + (r + 1);
+                const isLight = (r + f) % 2 !== 0;
+                const sqMesh = new THREE.Mesh(squareGeo, isLight ? lightSquareMat : darkSquareMat);
+                const pos = algebraicToWorld(sqName);
+                sqMesh.position.set(pos.x, -0.05, pos.z);
+                sqMesh.receiveShadow = true;
+                sqMesh.userData = { type: 'square', square: sqName };
+                boardGroup.add(sqMesh);
+                squareMeshes[sqName] = sqMesh;
+            }
+        }
+
+        // Label Koordinat A-H dan 1-8 pada bingkai papan menggunakan CanvasTexture
+        function createLabelMesh(text) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#e2c07d';
+            ctx.font = 'bold 34px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 32, 32);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+            const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.32), mat);
+            plane.rotation.x = -Math.PI / 2;
+            return plane;
+        }
+
+        for (let i = 0; i < 8; i++) {
+            const offset = (i - 3.5) * SQUARE_SIZE;
+            const edgeDist = (SQUARE_SIZE * 4) + 0.25;
+
+            // Huruf A-H (bawah & atas)
+            const fileLabelBottom = createLabelMesh(files[i].toUpperCase());
+            fileLabelBottom.position.set(offset, -0.005, edgeDist);
+            boardGroup.add(fileLabelBottom);
+
+            // Angka 1-8 (kiri & kanan)
+            const rankLabelLeft = createLabelMesh(String(8 - i));
+            rankLabelLeft.position.set(-edgeDist, -0.005, offset);
+            boardGroup.add(rankLabelLeft);
+        }
+
+        // ==========================================
+        // 4. GENERATOR BIDAK CATUR 3D PROSEDURAL
+        // ==========================================
+        const whitePieceMat = new THREE.MeshStandardMaterial({
+            color: 0xfdfaf3, // Ivory mengkilap
+            roughness: 0.18,
+            metalness: 0.08
+        });
+
+        const blackPieceMat = new THREE.MeshStandardMaterial({
+            color: 0x181c24, // Obsidian gelap mengkilap
+            roughness: 0.22,
+            metalness: 0.25
+        });
+
+        const goldAccentMat = new THREE.MeshStandardMaterial({
+            color: 0xd4af37,
+            roughness: 0.25,
+            metalness: 0.85
+        });
+
+        function buildLathe(points, segments = 28) {
+            const vecs = points.map(([x, y]) => new THREE.Vector2(x, y));
+            const geo = new THREE.LatheGeometry(vecs, segments);
+            geo.computeVertexNormals();
+            return geo;
+        }
+
+        function createPieceMesh(type, color) {
+            const group = new THREE.Group();
+            const mat = color === 'w' ? whitePieceMat : blackPieceMat;
+
+            if (type === 'p') {
+                // PION
+                const profile = [
+                    [0, 0], [0.34, 0], [0.34, 0.07], [0.27, 0.14],
+                    [0.21, 0.22], [0.14, 0.52], [0.20, 0.56], [0.13, 0.60], [0, 0.60]
+                ];
+                const body = new THREE.Mesh(buildLathe(profile), mat);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 20), mat);
+                head.position.y = 0.75;
+                group.add(body, head);
+            } 
+            else if (type === 'r') {
+                // BENTENG (ROOK)
+                const profile = [
+                    [0, 0], [0.38, 0], [0.38, 0.08], [0.30, 0.16],
+                    [0.24, 0.25], [0.19, 0.72], [0.27, 0.78], [0.27, 0.92],
+                    [0.19, 0.92], [0.19, 0.84], [0, 0.84]
+                ];
+                const body = new THREE.Mesh(buildLathe(profile), mat);
+                group.add(body);
+
+                // Gerigi benteng (battlements)
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i / 6) * Math.PI * 2;
+                    const merlon = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, 0.08), mat);
+                    merlon.position.set(Math.cos(angle) * 0.23, 0.96, Math.sin(angle) * 0.23);
+                    merlon.rotation.y = -angle;
+                    group.add(merlon);
+                }
+            } 
+            else if (type === 'n') {
+                // KUDA (KNIGHT)
+                const baseProfile = [
+                    [0, 0], [0.38, 0], [0.38, 0.08], [0.30, 0.16],
+                    [0.25, 0.26], [0.23, 0.34], [0, 0.34]
+                ];
+                const base = new THREE.Mesh(buildLathe(baseProfile), mat);
+                group.add(base);
+
+                // Bentuk kepala & leher kuda menggunakan ExtrudeGeometry
+                const shape = new THREE.Shape();
+                shape.moveTo(-0.16, 0.30);
+                shape.quadraticCurveTo(-0.22, 0.62, -0.08, 0.88); // Punggung leher
+                shape.lineTo(-0.04, 1.04); // Telinga
+                shape.lineTo(0.04, 0.94);  // Dahi
+                shape.quadraticCurveTo(0.24, 0.86, 0.28, 0.72);  // Moncong atas
+                shape.quadraticCurveTo(0.24, 0.62, 0.10, 0.64);  // Rahang bawah
+                shape.quadraticCurveTo(0.16, 0.45, 0.17, 0.30);  // Dada
+                shape.closePath();
+
+                const extrudeSettings = {
+                    depth: 0.16,
+                    bevelEnabled: true,
+                    bevelSegments: 4,
+                    steps: 2,
+                    bevelSize: 0.035,
+                    bevelThickness: 0.035
+                };
+                const headGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                headGeo.translate(0, 0, -0.08);
+                const headMesh = new THREE.Mesh(headGeo, mat);
+                // Putar kuda menghadap lawan (Putih menghadap -Z, Hitam menghadap +Z)
+                headMesh.rotation.y = color === 'w' ? Math.PI / 2 : -Math.PI / 2;
+                group.add(headMesh);
+            } 
+            else if (type === 'b') {
+                // GAJAH (BISHOP)
+                const profile = [
+                    [0, 0], [0.38, 0], [0.38, 0.08], [0.30, 0.16],
+                    [0.23, 0.25], [0.16, 0.72], [0.23, 0.76], [0.16, 0.80],
+                    [0.21, 0.92], [0.15, 1.06], [0.04, 1.14], [0, 1.15]
+                ];
+                const body = new THREE.Mesh(buildLathe(profile), mat);
+                const tip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 16), mat);
+                tip.position.y = 1.19;
+                group.add(body, tip);
+            } 
+            else if (type === 'q') {
+                // MENTERI (QUEEN)
+                const profile = [
+                    [0, 0], [0.41, 0], [0.41, 0.09], [0.32, 0.18],
+                    [0.25, 0.28], [0.17, 0.88], [0.26, 0.93], [0.18, 0.98],
+                    [0.24, 1.14], [0.14, 1.16], [0, 1.16]
+                ];
+                const body = new THREE.Mesh(buildLathe(profile), mat);
+                const dome = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 16), mat);
+                dome.position.y = 1.18;
+                const crownTip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 16), goldAccentMat);
+                crownTip.position.y = 1.34;
+                group.add(body, dome, crownTip);
+            } 
+            else if (type === 'k') {
+                // RAJA (KING)
+                const profile = [
+                    [0, 0], [0.43, 0], [0.43, 0.09], [0.34, 0.19],
+                    [0.26, 0.30], [0.18, 0.95], [0.28, 1.00], [0.19, 1.05],
+                    [0.25, 1.22], [0.12, 1.25], [0, 1.25]
+                ];
+                const body = new THREE.Mesh(buildLathe(profile), mat);
+                
+                // Mahkota Salib Emas
+                const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.24, 0.06), goldAccentMat);
+                crossV.position.y = 1.37;
+                const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.06, 0.06), goldAccentMat);
+                crossH.position.y = 1.39;
+                group.add(body, crossV, crossH);
+            }
+
+            // Aktifkan bayangan & simpan metadata untuk raycasting
+            group.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    child.userData = { parentPiece: group };
+                }
+            });
+
+            group.userData = { type: 'piece', pieceType: type, color: color, square: null };
+            return group;
+        }
+
+        // ==========================================
+        // 5. MANAJEMEN BIDAK, HIGHLIGHT & ANIMASI
+        // ==========================================
+        let pieceMeshes = {}; // map 'e2' -> THREE.Group
+        let selectedSquare = null;
+        let legalMovesForSelected = [];
+        let activeAnimations = [];
+
+        // Grup indikator langkah valid (cincin hijau/emas) & last move highlight
+        const indicatorsGroup = new THREE.Group();
+        scene.add(indicatorsGroup);
+
+        const lastMoveGroup = new THREE.Group();
+        scene.add(lastMoveGroup);
+
+        function rebuildBoardPieces() {
+            // Hapus bidak lama
+            Object.values(pieceMeshes).forEach(mesh => scene.remove(mesh));
+            pieceMeshes = {};
+            clearSelection();
+
+            const board = chess.board();
+            for (let r = 0; r < 8; r++) {
+                for (let f = 0; f < 8; f++) {
+                    const cell = board[r][f];
+                    if (cell) {
+                        const sqName = files[f] + (8 - r);
+                        const mesh = createPieceMesh(cell.type, cell.color);
+                        const pos = algebraicToWorld(sqName);
+                        mesh.position.copy(pos);
+                        mesh.userData.square = sqName;
+                        scene.add(mesh);
+                        pieceMeshes[sqName] = mesh;
+                    }
+                }
+            }
+        }
+
+        function clearSelection() {
+            if (selectedSquare && pieceMeshes[selectedSquare]) {
+                // Turunkan kembali bidak yang terpilih
+                animatePieceHeight(pieceMeshes[selectedSquare], 0);
+            }
+            selectedSquare = null;
+            legalMovesForSelected = [];
+            while (indicatorsGroup.children.length > 0) {
+                indicatorsGroup.remove(indicatorsGroup.children[0]);
+            }
+        }
+
+        function animatePieceHeight(pieceMesh, targetY) {
+            // Hapus animasi tinggi sebelumnya untuk bidak ini
+            activeAnimations = activeAnimations.filter(a => !(a.mesh === pieceMesh && a.kind === 'lift'));
+            activeAnimations.push({
+                kind: 'lift',
+                mesh: pieceMesh,
+                startY: pieceMesh.position.y,
+                endY: targetY,
+                progress: 0,
+                duration: 160
+            });
+        }
+
+        function selectSquare(sqName) {
+            const piece = chess.get(sqName);
+            if (!piece || piece.color !== 'w' || !isPlayerTurn || isAnimating) return;
+
+            clearSelection();
+            selectedSquare = sqName;
+
+            // Angkat bidak yang dipilih
+            if (pieceMeshes[sqName]) {
+                animatePieceHeight(pieceMeshes[sqName], 0.35);
+            }
+
+            // Ambil semua langkah valid dari chess.js
+            legalMovesForSelected = chess.moves({ square: sqName, verbose: true });
+
+            // Render indikator cincin 3D pada petak tujuan
+            legalMovesForSelected.forEach(move => {
+                const targetPos = algebraicToWorld(move.to);
+                const isCapture = Boolean(move.captured);
+
+                const ringGeo = new THREE.RingGeometry(isCapture ? 0.34 : 0.14, isCapture ? 0.44 : 0.24, 32);
+                ringGeo.rotateX(-Math.PI / 2);
+                const ringMat = new THREE.MeshBasicMaterial({
+                    color: isCapture ? 0xef4444 : 0x10b981,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.85
+                });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.position.set(targetPos.x, 0.015, targetPos.z);
+                ring.userData = { type: 'indicator', targetSquare: move.to };
+                indicatorsGroup.add(ring);
+            });
+        }
+
+        function highlightLastMove(fromSq, toSq) {
+            while (lastMoveGroup.children.length > 0) {
+                lastMoveGroup.remove(lastMoveGroup.children[0]);
+            }
+            [fromSq, toSq].forEach(sq => {
+                const pos = algebraicToWorld(sq);
+                const planeGeo = new THREE.PlaneGeometry(SQUARE_SIZE * 0.94, SQUARE_SIZE * 0.94);
+                planeGeo.rotateX(-Math.PI / 2);
+                const planeMat = new THREE.MeshBasicMaterial({
+                    color: 0xfacc15,
+                    transparent: true,
+                    opacity: 0.28
+                });
+                const marker = new THREE.Mesh(planeGeo, planeMat);
+                marker.position.set(pos.x, 0.012, pos.z);
+                lastMoveGroup.add(marker);
+            });
+        }
+
+        // Eksekusi langkah secara visual 3D + logika chess.js
+        function executeMove(moveObj, onComplete) {
+            isAnimating = true;
+            clearSelection();
+
+            const result = chess.move(moveObj);
+            if (!result) {
+                isAnimating = false;
+                return;
+            }
+
+            highlightLastMove(result.from, result.to);
+
+            const movingMesh = pieceMeshes[result.from];
+            const endPos = algebraicToWorld(result.to);
+
+            // 1. Tangani bidak yang termakan (termasuk En Passant)
+            if (result.captured) {
+                let capturedSq = result.to;
+                if (result.flags.includes('e')) {
+                    // En Passant: pion yang dimakan berada di baris asal dan kolom tujuan
+                    capturedSq = result.to[0] + result.from[1];
+                }
+                if (pieceMeshes[capturedSq]) {
+                    scene.remove(pieceMeshes[capturedSq]);
+                    delete pieceMeshes[capturedSq];
+                }
+            }
+
+            // 2. Tangani Rokade (Castling): pindahkan juga bentengnya
+            if (result.flags.includes('k') || result.flags.includes('q')) {
+                const rank = result.color === 'w' ? '1' : '8';
+                const rookFrom = result.flags.includes('k') ? 'h' + rank : 'a' + rank;
+                const rookTo = result.flags.includes('k') ? 'f' + rank : 'd' + rank;
+                const rookMesh = pieceMeshes[rookFrom];
+                if (rookMesh) {
+                    delete pieceMeshes[rookFrom];
+                    pieceMeshes[rookTo] = rookMesh;
+                    rookMesh.userData.square = rookTo;
+                    const rookEnd = algebraicToWorld(rookTo);
+                    activeAnimations.push({
+                        kind: 'move',
+                        mesh: rookMesh,
+                        startPos: rookMesh.position.clone(),
+                        endPos: rookEnd,
+                        arcHeight: 0.15,
+                        progress: 0,
+                        duration: 320
+                    });
+                }
+            }
+
+            // Update mapping bidak utama
+            delete pieceMeshes[result.from];
+            pieceMeshes[result.to] = movingMesh;
+            movingMesh.userData.square = result.to;
+
+            const isKnight = result.piece === 'n';
+            activeAnimations.push({
+                kind: 'move',
+                mesh: movingMesh,
+                startPos: movingMesh.position.clone(),
+                endPos: endPos,
+                arcHeight: isKnight ? 0.75 : 0.18, // Kuda melompat lebih tinggi
+                progress: 0,
+                duration: 320,
+                onFinish: () => {
+                    // 3. Tangani Promosi Pion: ganti mesh pion dengan mesh baru
+                    if (result.promotion) {
+                        scene.remove(movingMesh);
+                        const promotedMesh = createPieceMesh(result.promotion, result.color);
+                        promotedMesh.position.copy(endPos);
+                        promotedMesh.userData.square = result.to;
+                        scene.add(promotedMesh);
+                        pieceMeshes[result.to] = promotedMesh;
+                    }
+
+                    isAnimating = false;
+                    updateUI();
+                    if (onComplete) onComplete();
+                }
+            });
+        }
+
+        // ==========================================
+        // 6. INTERAKSI RAYCASTING (KLIK & TAP)
+        // ==========================================
+        const raycaster = new THREE.Raycaster();
+        const pointerDown = new THREE.Vector2();
+        const pointerUp = new THREE.Vector2();
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            pointerDown.set(e.clientX, e.clientY);
+        });
+
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            pointerUp.set(e.clientX, e.clientY);
+            // Abaikan jika pengguna sedang menggeser (orbit) kamera
+            if (pointerDown.distanceTo(pointerUp) > 6) return;
+            if (!isPlayerTurn || isAnimating || chess.game_over()) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            const ndc = new THREE.Vector2(
+                ((e.clientX - rect.left) / rect.width) * 2 - 1,
+                -((e.clientY - rect.top) / rect.height) * 2 + 1
+            );
+
+            raycaster.setFromCamera(ndc, camera);
+
+            // Cek klik pada indikator tujuan langkah terlebih dahulu
+            const indicatorHits = raycaster.intersectObjects(indicatorsGroup.children, false);
+            if (indicatorHits.length > 0 && selectedSquare) {
+                const targetSq = indicatorHits[0].object.userData.targetSquare;
+                handlePlayerTargetSelection(targetSq);
+                return;
+            }
+
+            // Cek klik pada bidak catur
+            const allPieceObjects = Object.values(pieceMeshes);
+            const pieceHits = raycaster.intersectObjects(allPieceObjects, true);
+            if (pieceHits.length > 0) {
+                const clickedPieceGroup = pieceHits[0].object.userData.parentPiece;
+                const sq = clickedPieceGroup.userData.square;
+                const color = clickedPieceGroup.userData.color;
+
+                if (color === 'w') {
+                    selectSquare(sq);
+                    return;
+                } else if (selectedSquare) {
+                    // Klik bidak lawan saat sudah memilih bidak putih -> coba makan
+                    handlePlayerTargetSelection(sq);
+                    return;
+                }
+            }
+
+            // Cek klik pada petak papan
+            const squareHits = raycaster.intersectObjects(Object.values(squareMeshes), false);
+            if (squareHits.length > 0 && selectedSquare) {
+                const targetSq = squareHits[0].object.userData.square;
+                handlePlayerTargetSelection(targetSq);
+                return;
+            }
+
+            clearSelection();
+        });
+
+        function handlePlayerTargetSelection(targetSq) {
+            const matchingMoves = legalMovesForSelected.filter(m => m.to === targetSq);
+            if (matchingMoves.length === 0) {
+                clearSelection();
+                return;
+            }
+
+            // Jika ada opsi promosi pion, tampilkan modal pemilihan
+            if (matchingMoves[0].promotion) {
+                pendingPromotionMove = { from: selectedSquare, to: targetSq };
+                document.getElementById('promotion-modal').classList.remove('hidden');
+                document.getElementById('promotion-modal').classList.add('flex');
+                return;
+            }
+
+            triggerPlayerAndAITurn({ from: selectedSquare, to: targetSq });
+        }
+
+        function triggerPlayerAndAITurn(moveSpec) {
+            isPlayerTurn = false;
+            updateUI();
+
+            executeMove(moveSpec, () => {
+                if (chess.game_over()) return;
+
+                // Beri jeda singkat agar animasi & indikator "AI Berpikir" terasa alami
+                setTimeout(() => {
+                    const depth = parseInt(document.getElementById('difficulty').value, 10);
+                    const aiMove = getBestAIMove(depth);
+                    if (aiMove) {
+                        executeMove(aiMove, () => {
+                            isPlayerTurn = true;
+                            updateUI();
+                        });
+                    } else {
+                        isPlayerTurn = true;
+                        updateUI();
+                    }
+                }, 280);
+            });
+        }
+
+        // ==========================================
+        // 7. PEMBARUAN ANTARMUKA (UI) & KONTROL
+        // ==========================================
+        const UNICODE_PIECES = {
+            w: { p: '♙', r: '♖', n: '♘', b: '♗', q: '♕', k: '♔' },
+            b: { p: '♟', r: '♜', n: '♞', b: '♝', q: '♛', k: '♚' }
+        };
+
+        function updateUI() {
+            const turnBadge = document.getElementById('turn-badge');
+            const turnDot = document.getElementById('turn-dot');
+            const turnText = document.getElementById('turn-text');
+            const statusBanner = document.getElementById('status-banner');
+            const btnUndo = document.getElementById('btn-undo');
+
+            // Status Giliran
+            if (chess.game_over()) {
+                turnDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+                turnText.textContent = 'Permainan Selesai';
+            } else if (chess.turn() === 'w') {
+                turnBadge.className = 'px-3.5 py-1.5 rounded-2xl text-xs font-semibold bg-slate-100 text-slate-900 shadow-sm flex items-center gap-2 transition-all';
+                turnDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+                turnText.textContent = 'Giliran Anda (Putih)';
+            } else {
+                turnBadge.className = 'px-3.5 py-1.5 rounded-2xl text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-2 transition-all';
+                turnDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 thinking-dot';
+                turnText.textContent = 'AI Sedang Berpikir...';
+            }
+
+            // Banner Skak / Game Over
+            if (chess.in_checkmate()) {
+                const winner = chess.turn() === 'w' ? 'Komputer (Hitam)' : 'Anda (Putih)';
+                const playerWon = chess.turn() === 'b';
+                statusBanner.textContent = `SKAKMAT! ${winner} Menang!`;
+                statusBanner.className = 'mt-3 px-3.5 py-2 rounded-2xl text-xs font-bold text-center bg-rose-500/25 text-rose-200 border border-rose-500/40';
+                statusBanner.classList.remove('hidden');
+
+                showGameOverModal(
+                    playerWon ? '🏆' : '🤖',
+                    playerWon ? 'Skakmat! Anda Menang!' : 'Skakmat! AI Menang',
+                    playerWon ? 'Strategi luar biasa! Anda berhasil mengalahkan AI.' : 'Raja Anda terkepung. Coba lagi untuk membalas!'
+                );
+            } else if (chess.in_draw() || chess.in_stalemate() || chess.in_threefold_repetition()) {
+                statusBanner.textContent = 'PERMAINAN SERI (REMIS)';
+                statusBanner.className = 'mt-3 px-3.5 py-2 rounded-2xl text-xs font-bold text-center bg-sky-500/25 text-sky-200 border border-sky-500/40';
+                statusBanner.classList.remove('hidden');
+
+                showGameOverModal('🤝', 'Permainan Seri!', 'Pertandingan berakhir imbang (Stalemate / Remis).');
+            } else if (chess.in_check()) {
+                statusBanner.textContent = '⚠️ SKAK! Lindungi Raja!';
+                statusBanner.className = 'mt-3 px-3.5 py-2 rounded-2xl text-xs font-bold text-center bg-amber-500/25 text-amber-200 border border-amber-500/40';
+                statusBanner.classList.remove('hidden');
+            } else {
+                statusBanner.classList.add('hidden');
+            }
+
+            // Riwayat Langkah & Hitung Bidak Termakan
+            const history = chess.history({ verbose: true });
+            const historyEl = document.getElementById('move-history');
+            document.getElementById('move-count').textContent = history.length;
+
+            const capturedWhite = []; // bidak hitam yang dimakan putih
+            const capturedBlack = []; // bidak putih yang dimakan hitam
+
+            history.forEach(m => {
+                if (m.captured) {
+                    if (m.color === 'w') capturedWhite.push(UNICODE_PIECES.b[m.captured]);
+                    else capturedBlack.push(UNICODE_PIECES.w[m.captured]);
+                }
+            });
+
+            document.getElementById('captured-by-white').textContent = capturedWhite.length ? capturedWhite.join(' ') : '-';
+            document.getElementById('captured-by-black').textContent = capturedBlack.length ? capturedBlack.join(' ') : '-';
+
+            if (history.length === 0) {
+                historyEl.innerHTML = '<div class="text-slate-500 italic text-center py-4">Belum ada langkah</div>';
+            } else {
+                let rows = '';
+                for (let i = 0; i < history.length; i += 2) {
+                    const moveNum = Math.floor(i / 2) + 1;
+                    const wMove = history[i]?.san || '';
+                    const bMove = history[i + 1]?.san || '';
+                    rows += `
+                        <div class="grid grid-cols-12 px-2 py-1 rounded-xl ${i % 4 === 0 ? 'bg-white/5' : ''}">
+                            <span class="col-span-3 text-slate-500 font-mono">${moveNum}.</span>
+                            <span class="col-span-4 font-semibold text-slate-100">${wMove}</span>
+                            <span class="col-span-5 font-semibold text-amber-300">${bMove}</span>
+                        </div>
+                    `;
+                }
+                historyEl.innerHTML = rows;
+                historyEl.scrollTop = historyEl.scrollHeight;
+            }
+
+            btnUndo.disabled = history.length < 2 || !isPlayerTurn || isAnimating;
+        }
+
+        function showGameOverModal(icon, title, desc) {
+            document.getElementById('gameover-icon').textContent = icon;
+            document.getElementById('gameover-title').textContent = title;
+            document.getElementById('gameover-desc').textContent = desc;
+            const modal = document.getElementById('gameover-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        // Event Listeners Tombol UI
+        document.querySelectorAll('.promo-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const promoPiece = btn.getAttribute('data-piece');
+                document.getElementById('promotion-modal').classList.add('hidden');
+                document.getElementById('promotion-modal').classList.remove('flex');
+                if (pendingPromotionMove) {
+                    const move = { ...pendingPromotionMove, promotion: promoPiece };
+                    pendingPromotionMove = null;
+                    triggerPlayerAndAITurn(move);
+                }
+            });
+        });
+
+        document.getElementById('btn-undo').addEventListener('click', () => {
+            if (!isPlayerTurn || isAnimating || chess.history().length < 2) return;
+            // Undo 2 langkah sekaligus (langkah AI + langkah pemain)
+            chess.undo();
+            chess.undo();
+            while (lastMoveGroup.children.length > 0) lastMoveGroup.remove(lastMoveGroup.children[0]);
+            rebuildBoardPieces();
+            updateUI();
+        });
+
+        document.getElementById('btn-flip').addEventListener('click', () => {
+            cameraFlipped = !cameraFlipped;
+            const targetZ = cameraFlipped ? -10.5 : 10.5;
+            camera.position.set(0, 10.5, targetZ);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        });
+
+        function resetGame() {
+            chess.reset();
+            isPlayerTurn = true;
+            isAnimating = false;
+            pendingPromotionMove = null;
+            activeAnimations = [];
+            while (lastMoveGroup.children.length > 0) lastMoveGroup.remove(lastMoveGroup.children[0]);
+            document.getElementById('gameover-modal').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.remove('flex');
+            document.getElementById('promotion-modal').classList.add('hidden');
+            document.getElementById('promotion-modal').classList.remove('flex');
+            rebuildBoardPieces();
+            updateUI();
+        }
+
+        document.getElementById('btn-reset').addEventListener('click', resetGame);
+        document.getElementById('btn-play-again').addEventListener('click', resetGame);
+
+        // ==========================================
+        // 8. RENDER LOOP & RESPONSIVITAS
+        // ==========================================
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        let lastTime = performance.now();
+
+        function animate(now) {
+            requestAnimationFrame(animate);
+            const dt = now - lastTime;
+            lastTime = now;
+
+            // Proses animasi bidak (angkat & geser melengkung)
+            for (let i = activeAnimations.length - 1; i >= 0; i--) {
+                const anim = activeAnimations[i];
+                anim.progress = Math.min(anim.progress + dt / anim.duration, 1);
+                // Ease-out cubic
+                const t = 1 - Math.pow(1 - anim.progress, 3);
+
+                if (anim.kind === 'lift') {
+                    anim.mesh.position.y = anim.startY + (anim.endY - anim.startY) * t;
+                } else if (anim.kind === 'move') {
+                    anim.mesh.position.x = anim.startPos.x + (anim.endPos.x - anim.startPos.x) * t;
+                    anim.mesh.position.z = anim.startPos.z + (anim.endPos.z - anim.startPos.z) * t;
+                    const baseLerpY = anim.startPos.y + (anim.endPos.y - anim.startPos.y) * t;
+                    anim.mesh.position.y = baseLerpY + Math.sin(anim.progress * Math.PI) * anim.arcHeight;
+                }
+
+                if (anim.progress >= 1) {
+                    activeAnimations.splice(i, 1);
+                    if (anim.onFinish) anim.onFinish();
+                }
+            }
+
+            // Animasi denyut halus pada indikator cincin langkah valid
+            if (indicatorsGroup.children.length > 0) {
+                const scale = 1 + Math.sin(now * 0.006) * 0.08;
+                indicatorsGroup.children.forEach(ring => ring.scale.set(scale, scale, 1));
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Mulai permainan
+        rebuildBoardPieces();
+        updateUI();
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
