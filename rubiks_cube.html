@@ -98,13 +98,17 @@
             </div>
         </div>
 
-        <div class="flex justify-center gap-4 mb-4 md:mb-8 pointer-events-auto">
-            <button id="btn-shuffle" class="glass-panel px-6 py-3 rounded-full font-semibold hover:bg-gray-800 transition-colors shadow-lg active:scale-95 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 256 256"><path d="M213.66,181.66l-24,24a8,8,0,0,1-11.32-11.32L192.69,180l-14.35-14.34a8,8,0,0,1,11.32-11.32l24,24A8,8,0,0,1,213.66,181.66ZM42.34,74.34l24-24a8,8,0,0,0-11.32-11.32L40.69,53.34,26.34,39A8,8,0,0,0,15,50.34l24,24A8,8,0,0,0,42.34,74.34ZM224,72a8,8,0,0,0-8-8H67.31L42.34,39A8,8,0,0,0,31,50.34L52.69,72H32a8,8,0,0,0,0,16H216A8,8,0,0,0,224,72ZM32,192H188.69l25-25a8,8,0,0,1,11.32,11.32l-21.66,21.66L188.69,225a8,8,0,0,1-11.32-11.32L198.69,198H40A8,8,0,0,1,40,182H32a8,8,0,0,1,0-16Z"></path></svg>
+        <div class="flex flex-wrap justify-center gap-2.5 sm:gap-4 mb-3 sm:mb-6 md:mb-8 pointer-events-auto">
+            <button id="btn-undo" class="glass-panel px-5 sm:px-6 py-2.5 sm:py-3 rounded-full font-semibold hover:bg-gray-800 transition-all shadow-lg active:scale-95 flex items-center gap-2 text-amber-300 disabled:opacity-40 disabled:pointer-events-none" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 0 1 8 8v2M3 10l6 6m-6-6l6-6"/></svg>
+                Undo
+            </button>
+            <button id="btn-shuffle" class="glass-panel px-5 sm:px-6 py-2.5 sm:py-3 rounded-full font-semibold hover:bg-gray-800 transition-all shadow-lg active:scale-95 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 256 256"><path d="M213.66,181.66l-24,24a8,8,0,0,1-11.32-11.32L192.69,180l-14.35-14.34a8,8,0,0,1,11.32-11.32l24,24A8,8,0,0,1,213.66,181.66ZM42.34,74.34l24-24a8,8,0,0,0-11.32-11.32L40.69,53.34,26.34,39A8,8,0,0,0,15,50.34l24,24A8,8,0,0,0,42.34,74.34ZM224,72a8,8,0,0,0-8-8H67.31L42.34,39A8,8,0,0,0,31,50.34L52.69,72H32a8,8,0,0,0,0,16H216A8,8,0,0,0,224,72ZM32,192H188.69l25-25a8,8,0,0,1,11.32,11.32l-21.66,21.66L188.69,225a8,8,0,0,1-11.32-11.32L198.69,198H40A8,8,0,0,1,40,182H32a8,8,0,0,1,0-16Z"></path></svg>
                 Shuffle
             </button>
-            <button id="btn-reset" class="glass-panel px-6 py-3 rounded-full font-semibold hover:bg-gray-800 transition-colors shadow-lg active:scale-95 flex items-center gap-2 text-red-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 256 256"><path d="M224,128a96,96,0,1,1-96-96,8,8,0,0,1,0,16,80,80,0,1,0,80,80,8,8,0,0,1,16,0Zm-96-24a8,8,0,0,0-8,8v40a8,8,0,0,0,16,0V112A8,8,0,0,0,128,104Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,128,168Z"></path></svg>
+            <button id="btn-reset" class="glass-panel px-5 sm:px-6 py-2.5 sm:py-3 rounded-full font-semibold hover:bg-gray-800 transition-all shadow-lg active:scale-95 flex items-center gap-2 text-red-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 256 256"><path d="M224,128a96,96,0,1,1-96-96,8,8,0,0,1,0,16,80,80,0,1,0,80,80,8,8,0,0,1,16,0Zm-96-24a8,8,0,0,0-8,8v40a8,8,0,0,0,16,0V112A8,8,0,0,0,128,104Zm0,64a12,12,0,1,0,12,12A12,12,0,0,0,128,168Z"></path></svg>
                 Reset
             </button>
         </div>
@@ -204,6 +208,7 @@
         let isGameActive = false;
         let isShuffling = false;
         let moveCount = 0;
+        let moveHistory = [];
         let timerSeconds = 0;
         let timerInterval = null;
         let confirmCallback = null;
@@ -255,6 +260,15 @@
             window.addEventListener('pointermove', onPointerMove);
             window.addEventListener('pointerup', onPointerUp);
             window.addEventListener('pointercancel', onPointerUp);
+
+            document.getElementById('btn-undo').addEventListener('click', undoLastMove);
+            window.addEventListener('keydown', (e) => {
+                if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    undoLastMove();
+                }
+            });
+            updateUndoButton();
 
             document.getElementById('btn-shuffle').addEventListener('click', () => {
                 if (isAnimating || isShuffling) return;
@@ -488,11 +502,15 @@
 
             if (bestAxis) {
                 const layer = Math.round(activeCubie.position[bestAxis]);
+                if (!isShuffling) {
+                    moveHistory.push({ axis: bestAxis, layer: layer, dir: direction });
+                }
                 if (isGameActive && !isShuffling) {
                     moveCount++;
                     updateMovesDisplay();
                 }
                 rotateLayer(bestAxis, layer, direction, 300, () => {
+                    updateUndoButton();
                     if (isGameActive && !isShuffling && isCubeSolved()) {
                         onGameWon();
                     }
@@ -500,10 +518,33 @@
             }
         }
 
+        function updateUndoButton() {
+            const btn = document.getElementById('btn-undo');
+            if (!btn) return;
+            btn.disabled = moveHistory.length === 0 || isAnimating || isShuffling;
+        }
+
+        function undoLastMove() {
+            if (isAnimating || isShuffling || moveHistory.length === 0) return;
+            const lastMove = moveHistory.pop();
+            if (isGameActive && moveCount > 0) {
+                moveCount--;
+                updateMovesDisplay();
+            }
+            updateUndoButton();
+            rotateLayer(lastMove.axis, lastMove.layer, -lastMove.dir, 250, () => {
+                updateUndoButton();
+                if (isGameActive && !isShuffling && isCubeSolved()) {
+                    onGameWon();
+                }
+            });
+        }
+
         // --- Rotation Engine ---
 
         function rotateLayer(axisName, layer, direction, duration, callback = null) {
             isAnimating = true;
+            updateUndoButton();
 
             // Create a temporary pivot at the origin
             const pivot = new THREE.Object3D();
@@ -560,6 +601,7 @@
                     
                     scene.remove(pivot);
                     isAnimating = false;
+                    updateUndoButton();
 
                     if (callback) callback();
                     else processQueue(); // Process next in shuffle if any
@@ -574,10 +616,12 @@
             stopTimer();
             isGameActive = false;
             isShuffling = true;
+            moveHistory = [];
             moveCount = 0;
             timerSeconds = 0;
             updateMovesDisplay();
             updateTimerDisplay();
+            updateUndoButton();
             shuffleCube();
         }
 
@@ -605,6 +649,7 @@
                     moveCount = 0;
                     updateMovesDisplay();
                     startTimer();
+                    updateUndoButton();
                 }
                 return;
             }
@@ -617,11 +662,13 @@
             isGameActive = false;
             isShuffling = false;
             shuffleQueue = [];
+            moveHistory = [];
             isAnimating = false;
             moveCount = 0;
             timerSeconds = 0;
             updateMovesDisplay();
             updateTimerDisplay();
+            updateUndoButton();
             createPuzzle();
             camera.position.set(4.5, 4.5, 6);
             camera.up.set(0, 1, 0);
@@ -715,6 +762,7 @@
         function onGameWon() {
             stopTimer();
             isGameActive = false;
+            updateUndoButton();
             showWinModal();
         }
 
